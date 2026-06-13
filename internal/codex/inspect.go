@@ -35,6 +35,13 @@ func inspectFile(path string, sensitive bool) types.ResourceStatus {
 	}
 	status.Exists = true
 	status.Size = info.Size()
+	if filepath.Base(path) == "config.toml" {
+		sections, err := InspectConfigSections(path)
+		if err == nil {
+			status.RootKeys = sections.RootKeys
+			status.Tables = sections.Tables
+		}
+	}
 	return status
 }
 

@@ -6,6 +6,8 @@ type ResourceStatus struct {
 	Size      int64  `json:"size,omitempty"`
 	Count     int    `json:"count,omitempty"`
 	Sensitive bool   `json:"sensitive,omitempty"`
+	RootKeys  []string `json:"rootKeys,omitempty"`
+	Tables    []string `json:"tables,omitempty"`
 }
 
 type CodexInspection struct {
@@ -16,11 +18,13 @@ type CodexInspection struct {
 }
 
 type ShareRequest struct {
-	CodexDir    string `json:"codexDir"`
-	Port        int    `json:"port"`
-	ShareConfig bool   `json:"shareConfig"`
-	ShareAuth   bool   `json:"shareAuth"`
-	ShareSkills bool   `json:"shareSkills"`
+	CodexDir       string   `json:"codexDir"`
+	Port           int      `json:"port"`
+	ShareConfig    bool     `json:"shareConfig"`
+	ShareAuth      bool     `json:"shareAuth"`
+	ShareSkills    bool     `json:"shareSkills"`
+	ConfigRootKeys []string `json:"configRootKeys,omitempty"`
+	ConfigTables   []string `json:"configTables,omitempty"`
 }
 
 type ShareStatus struct {
@@ -37,12 +41,14 @@ type PeerStatus struct {
 }
 
 type SyncRequest struct {
-	PeerIP     string `json:"peerIP"`
-	Port       int    `json:"port"`
-	TargetDir  string `json:"targetDir"`
-	SyncConfig bool   `json:"syncConfig"`
-	SyncAuth   bool   `json:"syncAuth"`
-	SyncSkills bool   `json:"syncSkills"`
+	PeerIP         string   `json:"peerIP"`
+	Port           int      `json:"port"`
+	TargetDir      string   `json:"targetDir"`
+	SyncConfig     bool     `json:"syncConfig"`
+	SyncAuth       bool     `json:"syncAuth"`
+	SyncSkills     bool     `json:"syncSkills"`
+	ConfigRootKeys []string `json:"configRootKeys,omitempty"`
+	ConfigTables   []string `json:"configTables,omitempty"`
 }
 
 type SyncResult struct {
@@ -65,6 +71,8 @@ type ManifestResource struct {
 	Sensitive bool        `json:"sensitive,omitempty"`
 	Count     int         `json:"count,omitempty"`
 	Files     []FileEntry `json:"files,omitempty"`
+	RootKeys  []string    `json:"rootKeys,omitempty"`
+	Tables    []string    `json:"tables,omitempty"`
 }
 
 type ManifestShared struct {

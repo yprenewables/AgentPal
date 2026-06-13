@@ -27,6 +27,8 @@ func BuildManifest(req types.ShareRequest) (types.RemoteManifest, string, error)
 		if err != nil {
 			return manifest, base, err
 		}
+		entry.RootKeys = req.ConfigRootKeys
+		entry.Tables = req.ConfigTables
 		manifest.Shared.Config = entry
 	}
 	if req.ShareAuth {

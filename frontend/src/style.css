@@ -101,6 +101,48 @@ input { width: 100%; border: 1px solid #ccd5df; border-radius: 12px; font: inher
 
 .checklist small { grid-column: 2; }
 
+.config-sections {
+  background: #f7fafc;
+  border: 1px solid #dce3eb;
+  border-radius: 18px;
+  display: grid;
+  gap: 12px;
+  margin: 12px 0;
+  padding: 14px;
+}
+
+.section-head, .section-title { align-items: center; display: flex; justify-content: space-between; gap: 12px; }
+
+.section-head span, .section-group small { color: #667385; }
+
+.section-group { display: grid; gap: 8px; }
+
+.section-title span { font-weight: 800; }
+
+.link-button {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  color: #1f7a6d;
+  padding: 0;
+}
+
+.link-button:hover:not(:disabled) { box-shadow: none; transform: none; }
+
+.section-options { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.section-options label {
+  align-items: center;
+  background: #fff;
+  border: 1px solid #dce3eb;
+  border-radius: 999px;
+  display: flex;
+  gap: 8px;
+  padding: 8px 10px;
+}
+
+.section-options input[type="checkbox"] { accent-color: #1f7a6d; height: 18px; width: 18px; }
+
 .sync-bottom { display: grid; gap: 12px; grid-template-columns: minmax(0, 1.2fr) minmax(260px, 0.8fr); margin-top: 12px; }
 
 .sync-bottom .field { margin-bottom: 0; }

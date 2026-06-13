@@ -88,6 +88,10 @@ func selectedItems(req types.SyncRequest, manifest types.RemoteManifest) ([]stri
 
 func downloadSelected(client peer.Client, req types.SyncRequest, manifest types.RemoteManifest, tempDir string) error {
 	if req.SyncConfig {
+		if len(req.ConfigRootKeys) == 0 && len(req.ConfigTables) == 0 {
+			req.ConfigRootKeys = manifest.Shared.Config.RootKeys
+			req.ConfigTables = manifest.Shared.Config.Tables
+		}
 		if err := downloadFile(client, req, "config.toml", filepath.Join(tempDir, "config.toml"), manifest.Shared.Config.SHA256); err != nil {
 			return err
 		}
@@ -178,7 +182,7 @@ func applySelected(req types.SyncRequest, targetDir, tempDir string) error {
 		return err
 	}
 	if req.SyncConfig {
-		if err := atomicCopy(filepath.Join(tempDir, "config.toml"), filepath.Join(targetDir, "config.toml")); err != nil {
+		if err := applyConfig(req, filepath.Join(tempDir, "config.toml"), filepath.Join(targetDir, "config.toml")); err != nil {
 			return err
 		}
 	}
@@ -195,6 +199,24 @@ func applySelected(req types.SyncRequest, targetDir, tempDir string) error {
 			return err
 		}
 	}
+	return nil
+}
+
+func applyConfig(req types.SyncRequest, sourcePath, targetPath string) error {
+	tmp := targetPath + ".agentpal.tmp"
+	if err := copyIfExists(targetPath, tmp); err != nil {
+		return err
+	}
+	if _, err := os.Stat(targetPath); os.IsNotExist(err) {
+		return codex.MergeConfigSections(sourcePath, targetPath, req.ConfigRootKeys, req.ConfigTables)
+	}
+	if err := codex.MergeConfigSections(sourcePath, targetPath, req.ConfigRootKeys, req.ConfigTables); err != nil {
+		if _, restoreErr := os.Stat(tmp); restoreErr == nil {
+			_ = os.Rename(tmp, targetPath)
+		}
+		return err
+	}
+	_ = os.Remove(tmp)
 	return nil
 }
 

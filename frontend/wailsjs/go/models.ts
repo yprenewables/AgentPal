@@ -6,6 +6,8 @@ export namespace types {
 	    size?: number;
 	    count?: number;
 	    sensitive?: boolean;
+	    rootKeys?: string[];
+	    tables?: string[];
 	
 	    static createFrom(source: any = {}) {
 	        return new ResourceStatus(source);
@@ -18,6 +20,8 @@ export namespace types {
 	        this.size = source["size"];
 	        this.count = source["count"];
 	        this.sensitive = source["sensitive"];
+	        this.rootKeys = source["rootKeys"];
+	        this.tables = source["tables"];
 	    }
 	}
 	export class CodexInspection {
@@ -80,6 +84,8 @@ export namespace types {
 	    sensitive?: boolean;
 	    count?: number;
 	    files?: FileEntry[];
+	    rootKeys?: string[];
+	    tables?: string[];
 	
 	    static createFrom(source: any = {}) {
 	        return new ManifestResource(source);
@@ -94,6 +100,8 @@ export namespace types {
 	        this.sensitive = source["sensitive"];
 	        this.count = source["count"];
 	        this.files = this.convertValues(source["files"], FileEntry);
+	        this.rootKeys = source["rootKeys"];
+	        this.tables = source["tables"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -207,6 +215,8 @@ export namespace types {
 	    shareConfig: boolean;
 	    shareAuth: boolean;
 	    shareSkills: boolean;
+	    configRootKeys?: string[];
+	    configTables?: string[];
 	
 	    static createFrom(source: any = {}) {
 	        return new ShareRequest(source);
@@ -219,6 +229,8 @@ export namespace types {
 	        this.shareConfig = source["shareConfig"];
 	        this.shareAuth = source["shareAuth"];
 	        this.shareSkills = source["shareSkills"];
+	        this.configRootKeys = source["configRootKeys"];
+	        this.configTables = source["configTables"];
 	    }
 	}
 	export class ShareStatus {
@@ -246,6 +258,8 @@ export namespace types {
 	    syncConfig: boolean;
 	    syncAuth: boolean;
 	    syncSkills: boolean;
+	    configRootKeys?: string[];
+	    configTables?: string[];
 	
 	    static createFrom(source: any = {}) {
 	        return new SyncRequest(source);
@@ -259,6 +273,8 @@ export namespace types {
 	        this.syncConfig = source["syncConfig"];
 	        this.syncAuth = source["syncAuth"];
 	        this.syncSkills = source["syncSkills"];
+	        this.configRootKeys = source["configRootKeys"];
+	        this.configTables = source["configTables"];
 	    }
 	}
 	export class SyncResult {
