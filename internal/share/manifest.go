@@ -41,7 +41,7 @@ func BuildManifest(req types.ShareRequest) (types.RemoteManifest, string, error)
 		manifest.Shared.Auth.Sensitive = true
 	}
 	if req.ShareSkills {
-		entry, err := skillsResource(base)
+		entry, err := skillsResource(base, req.Skills)
 		if err != nil {
 			return manifest, base, err
 		}
@@ -69,7 +69,7 @@ func fileResource(base, relPath string, sensitive bool) (types.ManifestResource,
 	return types.ManifestResource{Enabled: true, Path: relPath, SHA256: hash, Size: info.Size(), Sensitive: sensitive}, nil
 }
 
-func skillsResource(base string) (types.ManifestResource, error) {
+func skillsResource(base string, selectedSkills []string) (types.ManifestResource, error) {
 	skillsDir, err := security.SafeJoin(base, "skills")
 	if err != nil {
 		return types.ManifestResource{}, err
@@ -78,6 +78,8 @@ func skillsResource(base string) (types.ManifestResource, error) {
 	if err != nil || !info.IsDir() {
 		return types.ManifestResource{}, errors.New("skills was selected but was not found in the sharing directory")
 	}
+	selectedSet := selectedSkillSet(selectedSkills)
+	skillSet := map[string]bool{}
 	var files []types.FileEntry
 	err = filepath.WalkDir(skillsDir, func(path string, entry os.DirEntry, walkErr error) error {
 		if walkErr != nil {
@@ -100,6 +102,10 @@ func skillsResource(base string) (types.ManifestResource, error) {
 		if err := security.ValidateSkillRelPath(rel); err != nil {
 			return err
 		}
+		skill := firstPathSegment(rel)
+		if len(selectedSet) > 0 && !selectedSet[skill] {
+			return nil
+		}
 		hash, err := hashFile(path)
 		if err != nil {
 			return err
@@ -109,13 +115,41 @@ func skillsResource(base string) (types.ManifestResource, error) {
 			return err
 		}
 		files = append(files, types.FileEntry{Path: rel, SHA256: hash, Size: info.Size()})
+		skillSet[skill] = true
 		return nil
 	})
 	if err != nil {
 		return types.ManifestResource{}, err
 	}
 	sort.Slice(files, func(i, j int) bool { return strings.Compare(files[i].Path, files[j].Path) < 0 })
-	return types.ManifestResource{Enabled: true, Count: len(files), Files: files}, nil
+	skills := make([]string, 0, len(skillSet))
+	for skill := range skillSet {
+		skills = append(skills, skill)
+	}
+	sort.Strings(skills)
+	return types.ManifestResource{Enabled: true, Count: len(files), Files: files, Skills: skills}, nil
+}
+
+func selectedSkillSet(skills []string) map[string]bool {
+	set := map[string]bool{}
+	for _, skill := range skills {
+		skill = strings.TrimSpace(skill)
+		if skill != "" {
+			set[skill] = true
+		}
+	}
+	return set
+}
+
+func firstPathSegment(path string) string {
+	path = strings.Trim(path, "/")
+	if path == "" {
+		return ""
+	}
+	if idx := strings.Index(path, "/"); idx >= 0 {
+		return path[:idx]
+	}
+	return path
 }
 
 func hashFile(path string) (string, error) {

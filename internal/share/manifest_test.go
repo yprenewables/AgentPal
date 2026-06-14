@@ -26,7 +26,7 @@ func TestBuildManifest(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	manifest, _, err := BuildManifest(types.ShareRequest{CodexDir: dir, ShareConfig: true, ShareSkills: true})
+	manifest, _, err := BuildManifest(types.ShareRequest{CodexDir: dir, ShareConfig: true, ShareSkills: true, Skills: []string{"translation"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -38,5 +38,8 @@ func TestBuildManifest(t *testing.T) {
 	}
 	if manifest.Shared.Skills.Count != 1 || manifest.Shared.Skills.Files[0].Path != "translation/SKILL.md" {
 		t.Fatalf("unexpected skills manifest: %+v", manifest.Shared.Skills)
+	}
+	if len(manifest.Shared.Skills.Skills) != 1 || manifest.Shared.Skills.Skills[0] != "translation" {
+		t.Fatalf("unexpected skill list: %+v", manifest.Shared.Skills.Skills)
 	}
 }

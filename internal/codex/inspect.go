@@ -3,6 +3,8 @@ package codex
 import (
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 
 	"agentpal/internal/security"
 	"agentpal/internal/types"
@@ -52,6 +54,7 @@ func inspectSkills(path string) types.ResourceStatus {
 		return status
 	}
 	status.Exists = true
+	skillSet := map[string]bool{}
 	_ = filepath.WalkDir(path, func(current string, entry os.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return nil
@@ -64,8 +67,30 @@ func inspectSkills(path string) types.ResourceStatus {
 		}
 		if entry.Type().IsRegular() {
 			status.Count++
+			rel, err := filepath.Rel(path, current)
+			if err == nil {
+				first := firstPathSegment(filepath.ToSlash(rel))
+				if first != "" {
+					skillSet[first] = true
+				}
+			}
 		}
 		return nil
 	})
+	for skill := range skillSet {
+		status.Skills = append(status.Skills, skill)
+	}
+	sort.Strings(status.Skills)
 	return status
+}
+
+func firstPathSegment(path string) string {
+	path = strings.Trim(path, "/")
+	if path == "" {
+		return ""
+	}
+	if idx := strings.Index(path, "/"); idx >= 0 {
+		return path[:idx]
+	}
+	return path
 }

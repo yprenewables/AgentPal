@@ -8,6 +8,7 @@ export namespace types {
 	    sensitive?: boolean;
 	    rootKeys?: string[];
 	    tables?: string[];
+	    skills?: string[];
 	
 	    static createFrom(source: any = {}) {
 	        return new ResourceStatus(source);
@@ -22,6 +23,7 @@ export namespace types {
 	        this.sensitive = source["sensitive"];
 	        this.rootKeys = source["rootKeys"];
 	        this.tables = source["tables"];
+	        this.skills = source["skills"];
 	    }
 	}
 	export class CodexInspection {
@@ -86,6 +88,7 @@ export namespace types {
 	    files?: FileEntry[];
 	    rootKeys?: string[];
 	    tables?: string[];
+	    skills?: string[];
 	
 	    static createFrom(source: any = {}) {
 	        return new ManifestResource(source);
@@ -102,6 +105,7 @@ export namespace types {
 	        this.files = this.convertValues(source["files"], FileEntry);
 	        this.rootKeys = source["rootKeys"];
 	        this.tables = source["tables"];
+	        this.skills = source["skills"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -217,6 +221,7 @@ export namespace types {
 	    shareSkills: boolean;
 	    configRootKeys?: string[];
 	    configTables?: string[];
+	    skills?: string[];
 	
 	    static createFrom(source: any = {}) {
 	        return new ShareRequest(source);
@@ -231,6 +236,7 @@ export namespace types {
 	        this.shareSkills = source["shareSkills"];
 	        this.configRootKeys = source["configRootKeys"];
 	        this.configTables = source["configTables"];
+	        this.skills = source["skills"];
 	    }
 	}
 	export class ShareStatus {
@@ -260,6 +266,7 @@ export namespace types {
 	    syncSkills: boolean;
 	    configRootKeys?: string[];
 	    configTables?: string[];
+	    skills?: string[];
 	
 	    static createFrom(source: any = {}) {
 	        return new SyncRequest(source);
@@ -275,6 +282,7 @@ export namespace types {
 	        this.syncSkills = source["syncSkills"];
 	        this.configRootKeys = source["configRootKeys"];
 	        this.configTables = source["configTables"];
+	        this.skills = source["skills"];
 	    }
 	}
 	export class SyncResult {

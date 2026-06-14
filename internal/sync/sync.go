@@ -37,6 +37,7 @@ func FromPeer(req types.SyncRequest) (types.SyncResult, error) {
 	if err != nil {
 		return types.SyncResult{}, err
 	}
+	req = withDefaultSelections(req, manifest)
 	tempDir, err := os.MkdirTemp("", "agentpal-sync-*")
 	if err != nil {
 		return types.SyncResult{}, err
@@ -86,12 +87,19 @@ func selectedItems(req types.SyncRequest, manifest types.RemoteManifest) ([]stri
 	return items, nil
 }
 
+func withDefaultSelections(req types.SyncRequest, manifest types.RemoteManifest) types.SyncRequest {
+	if req.SyncConfig && len(req.ConfigRootKeys) == 0 && len(req.ConfigTables) == 0 {
+		req.ConfigRootKeys = manifest.Shared.Config.RootKeys
+		req.ConfigTables = manifest.Shared.Config.Tables
+	}
+	if req.SyncSkills && len(req.Skills) == 0 {
+		req.Skills = manifest.Shared.Skills.Skills
+	}
+	return req
+}
+
 func downloadSelected(client peer.Client, req types.SyncRequest, manifest types.RemoteManifest, tempDir string) error {
 	if req.SyncConfig {
-		if len(req.ConfigRootKeys) == 0 && len(req.ConfigTables) == 0 {
-			req.ConfigRootKeys = manifest.Shared.Config.RootKeys
-			req.ConfigTables = manifest.Shared.Config.Tables
-		}
 		if err := downloadFile(client, req, "config.toml", filepath.Join(tempDir, "config.toml"), manifest.Shared.Config.SHA256); err != nil {
 			return err
 		}
@@ -102,9 +110,13 @@ func downloadSelected(client peer.Client, req types.SyncRequest, manifest types.
 		}
 	}
 	if req.SyncSkills {
+		selectedSkills := stringSet(req.Skills)
 		for _, file := range manifest.Shared.Skills.Files {
 			if err := security.ValidateSkillRelPath(file.Path); err != nil {
 				return err
+			}
+			if len(selectedSkills) > 0 && !selectedSkills[firstPathSegment(file.Path)] {
+				continue
 			}
 			target, err := security.SafeJoin(filepath.Join(tempDir, "skills"), file.Path)
 			if err != nil {
@@ -192,10 +204,41 @@ func applySelected(req types.SyncRequest, targetDir, tempDir string) error {
 		}
 	}
 	if req.SyncSkills {
-		if err := os.RemoveAll(filepath.Join(targetDir, "skills")); err != nil {
+		if err := applySkills(req, filepath.Join(tempDir, "skills"), filepath.Join(targetDir, "skills")); err != nil {
 			return err
 		}
-		if err := copyIfExists(filepath.Join(tempDir, "skills"), filepath.Join(targetDir, "skills")); err != nil {
+	}
+	return nil
+}
+
+func applySkills(req types.SyncRequest, sourceDir, targetDir string) error {
+	if len(req.Skills) == 0 {
+		return nil
+	}
+	if err := os.MkdirAll(targetDir, 0o700); err != nil {
+		return err
+	}
+	for _, skill := range req.Skills {
+		if err := security.ValidateSkillRelPath(skill); err != nil {
+			return err
+		}
+		sourcePath, err := security.SafeJoin(sourceDir, skill)
+		if err != nil {
+			return err
+		}
+		if _, err := os.Stat(sourcePath); os.IsNotExist(err) {
+			continue
+		} else if err != nil {
+			return err
+		}
+		targetPath, err := security.SafeJoin(targetDir, skill)
+		if err != nil {
+			return err
+		}
+		if err := os.RemoveAll(targetPath); err != nil {
+			return err
+		}
+		if err := copyIfExists(sourcePath, targetPath); err != nil {
 			return err
 		}
 	}
@@ -289,4 +332,23 @@ func atomicCopy(src, dst string) error {
 		return err
 	}
 	return os.Rename(tmp, dst)
+}
+
+func stringSet(values []string) map[string]bool {
+	set := map[string]bool{}
+	for _, value := range values {
+		if value != "" {
+			set[value] = true
+		}
+	}
+	return set
+}
+
+func firstPathSegment(path string) string {
+	for idx, char := range path {
+		if char == '/' {
+			return path[:idx]
+		}
+	}
+	return path
 }

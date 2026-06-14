@@ -6,6 +6,7 @@ export type ResourceStatus = {
   sensitive?: boolean;
   rootKeys?: string[];
   tables?: string[];
+  skills?: string[];
 };
 
 export type CodexInspection = {
@@ -38,6 +39,7 @@ export type ManifestResource = {
   files?: Array<{ path: string; sha256: string; size: number }>;
   rootKeys?: string[];
   tables?: string[];
+  skills?: string[];
 };
 
 export type RemoteManifest = {

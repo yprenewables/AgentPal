@@ -1,13 +1,14 @@
 package types
 
 type ResourceStatus struct {
-	Exists    bool   `json:"exists"`
-	Path      string `json:"path"`
-	Size      int64  `json:"size,omitempty"`
-	Count     int    `json:"count,omitempty"`
-	Sensitive bool   `json:"sensitive,omitempty"`
+	Exists    bool     `json:"exists"`
+	Path      string   `json:"path"`
+	Size      int64    `json:"size,omitempty"`
+	Count     int      `json:"count,omitempty"`
+	Sensitive bool     `json:"sensitive,omitempty"`
 	RootKeys  []string `json:"rootKeys,omitempty"`
 	Tables    []string `json:"tables,omitempty"`
+	Skills    []string `json:"skills,omitempty"`
 }
 
 type CodexInspection struct {
@@ -25,6 +26,7 @@ type ShareRequest struct {
 	ShareSkills    bool     `json:"shareSkills"`
 	ConfigRootKeys []string `json:"configRootKeys,omitempty"`
 	ConfigTables   []string `json:"configTables,omitempty"`
+	Skills         []string `json:"skills,omitempty"`
 }
 
 type ShareStatus struct {
@@ -49,6 +51,7 @@ type SyncRequest struct {
 	SyncSkills     bool     `json:"syncSkills"`
 	ConfigRootKeys []string `json:"configRootKeys,omitempty"`
 	ConfigTables   []string `json:"configTables,omitempty"`
+	Skills         []string `json:"skills,omitempty"`
 }
 
 type SyncResult struct {
@@ -73,6 +76,7 @@ type ManifestResource struct {
 	Files     []FileEntry `json:"files,omitempty"`
 	RootKeys  []string    `json:"rootKeys,omitempty"`
 	Tables    []string    `json:"tables,omitempty"`
+	Skills    []string    `json:"skills,omitempty"`
 }
 
 type ManifestShared struct {
