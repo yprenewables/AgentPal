@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { DirectoryPicker, Notice } from './components';
-import { api, type CodexInspection, type RemoteManifest, type ShareStatus, type SyncResult } from './wails';
+import { api, type CodexInspection, type RemoteManifest, type ShareStatus, type SyncResult, type UpdateInfo } from './wails';
 
 type Selection = { config: boolean; auth: boolean; skills: boolean };
 type ConfigSelection = { rootKeys: string[]; tables: string[] };
@@ -89,6 +89,24 @@ function resourceLabel(key: ResourceKey) {
 
 export default function App() {
   const [page, setPage] = useState<'share' | 'sync'>('share');
+  const [update, setUpdate] = useState<UpdateInfo | null>(null);
+  const [updateNotice, setUpdateNotice] = useState<string | null>(null);
+
+  async function checkUpdate() {
+    if (!api) return;
+    try {
+      const next = await api.CheckForUpdate();
+      setUpdate(next);
+      setUpdateNotice(next.hasUpdate ? null : `Already on latest version ${next.currentVersion}.`);
+    } catch (error) {
+      setUpdateNotice(String(error));
+    }
+  }
+
+  async function openRelease() {
+    if (!api || !update?.releaseUrl) return;
+    await api.OpenURL(update.releaseUrl);
+  }
 
   return (
     <main>
@@ -103,6 +121,16 @@ export default function App() {
         </nav>
       </header>
       {!api && <Notice kind="warning">Backend bridge is unavailable. Run this inside Wails for full functionality.</Notice>}
+      <section className="update-strip">
+        <div>
+          <strong>Updates</strong>
+          <span>{update?.hasUpdate ? `New version ${update.latestVersion} available` : updateNotice ?? 'Check GitHub Releases for a newer build.'}</span>
+        </div>
+        <div className="update-actions">
+          <button className="secondary" type="button" onClick={checkUpdate}>Check</button>
+          {update?.hasUpdate && <button className="primary" type="button" onClick={openRelease}>Download</button>}
+        </div>
+      </section>
       {page === 'share' ? <SharePage /> : <SyncPage />}
     </main>
   );

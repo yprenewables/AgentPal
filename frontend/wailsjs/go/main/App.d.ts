@@ -4,6 +4,8 @@ import {types} from '../models';
 
 export function BrowseFolder():Promise<string>;
 
+export function CheckForUpdate():Promise<types.UpdateInfo>;
+
 export function FetchRemoteManifest(arg1:string):Promise<types.RemoteManifest>;
 
 export function GetBackupExamplePath():Promise<string>;
@@ -17,6 +19,8 @@ export function GetLocalIPs():Promise<Array<string>>;
 export function InspectCodexDir(arg1:string):Promise<types.CodexInspection>;
 
 export function OpenFolder(arg1:string):Promise<void>;
+
+export function OpenURL(arg1:string):Promise<void>;
 
 export function StartSharing(arg1:types.ShareRequest):Promise<types.ShareStatus>;
 

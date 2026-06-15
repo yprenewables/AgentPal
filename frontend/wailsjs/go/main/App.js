@@ -6,6 +6,10 @@ export function BrowseFolder() {
   return window['go']['main']['App']['BrowseFolder']();
 }
 
+export function CheckForUpdate() {
+  return window['go']['main']['App']['CheckForUpdate']();
+}
+
 export function FetchRemoteManifest(arg1) {
   return window['go']['main']['App']['FetchRemoteManifest'](arg1);
 }
@@ -32,6 +36,10 @@ export function InspectCodexDir(arg1) {
 
 export function OpenFolder(arg1) {
   return window['go']['main']['App']['OpenFolder'](arg1);
+}
+
+export function OpenURL(arg1) {
+  return window['go']['main']['App']['OpenURL'](arg1);
 }
 
 export function StartSharing(arg1) {

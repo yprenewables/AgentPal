@@ -21,6 +21,7 @@ import (
 	"agentpal/internal/share"
 	appsync "agentpal/internal/sync"
 	"agentpal/internal/types"
+	"agentpal/internal/update"
 )
 
 type App struct {
@@ -70,6 +71,21 @@ func (a *App) GetBackupExamplePath() (string, error) {
 		return "", err
 	}
 	return filepath.Join(root, "YYYYMMDD-HHMMSS"), nil
+}
+
+func (a *App) CheckForUpdate() (types.UpdateInfo, error) {
+	return update.Check()
+}
+
+func (a *App) OpenURL(url string) error {
+	if url == "" {
+		return errors.New("url is required")
+	}
+	if a.ctx != nil {
+		wailsruntime.BrowserOpenURL(a.ctx, url)
+		return nil
+	}
+	return openURLFallback(url)
 }
 
 func (a *App) StartSharing(req types.ShareRequest) (types.ShareStatus, error) {
@@ -140,5 +156,16 @@ func (a *App) OpenFolder(path string) error {
 		return exec.Command("explorer", expanded).Start()
 	default:
 		return exec.Command("xdg-open", expanded).Start()
+	}
+}
+
+func openURLFallback(url string) error {
+	switch runtime.GOOS {
+	case "darwin":
+		return exec.Command("open", url).Start()
+	case "windows":
+		return exec.Command("rundll32", "url.dll,FileProtocolHandler", url).Start()
+	default:
+		return exec.Command("xdg-open", url).Start()
 	}
 }

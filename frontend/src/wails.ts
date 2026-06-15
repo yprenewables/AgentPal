@@ -59,6 +59,14 @@ export type SyncResult = {
   backupPath: string;
 };
 
+export type UpdateInfo = {
+  currentVersion: string;
+  latestVersion: string;
+  hasUpdate: boolean;
+  releaseUrl: string;
+  assets: Array<{ name: string; url: string; size: number }>;
+};
+
 type Backend = {
   App: {
     GetLocalIPs(): Promise<string[]>;
@@ -67,6 +75,8 @@ type Backend = {
     GetDefaultCodexDir(): Promise<string>;
     GetBackupRoot(): Promise<string>;
     GetBackupExamplePath(): Promise<string>;
+    CheckForUpdate(): Promise<UpdateInfo>;
+    OpenURL(url: string): Promise<void>;
     StartSharing(req: unknown): Promise<ShareStatus>;
     StopSharing(): Promise<void>;
     TestConnection(ip: string): Promise<PeerStatus>;

@@ -97,3 +97,17 @@ type HealthResponse struct {
 	Version string `json:"version"`
 	Port    int    `json:"port"`
 }
+
+type UpdateAsset struct {
+	Name string `json:"name"`
+	URL  string `json:"url"`
+	Size int64  `json:"size"`
+}
+
+type UpdateInfo struct {
+	CurrentVersion string        `json:"currentVersion"`
+	LatestVersion  string        `json:"latestVersion"`
+	HasUpdate      bool          `json:"hasUpdate"`
+	ReleaseURL     string        `json:"releaseUrl"`
+	Assets         []UpdateAsset `json:"assets"`
+}
