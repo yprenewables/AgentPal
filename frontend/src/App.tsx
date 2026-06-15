@@ -270,6 +270,8 @@ function SyncPage() {
   const [result, setResult] = useState<SyncResult | null>(null);
   const [backupExamplePath, setBackupExamplePath] = useState('~/.agentpal/backups/YYYYMMDD-HHMMSS');
   const [notice, setNotice] = useState<{ kind: 'success' | 'warning' | 'error' | 'info'; text: string } | null>(null);
+  const [syncStatus, setSyncStatus] = useState('');
+  const [syncing, setSyncing] = useState(false);
 
   useEffect(() => {
     if (!api) return;
@@ -301,7 +303,11 @@ function SyncPage() {
 
   async function syncNow() {
     if (!api) return;
+    setSyncing(true);
+    setResult(null);
+    setSyncStatus('Preparing sync...');
     try {
+      setSyncStatus('Downloading and verifying selected resources...');
       const next = await api.SyncFromPeer({
         peerIP,
         port: 28888,
@@ -314,9 +320,13 @@ function SyncPage() {
         skills: skillSelection,
       });
       setResult(next);
+      setSyncStatus(next.ok ? 'Sync completed.' : 'Sync partially failed. Check the backup path below.');
       setNotice({ kind: next.ok ? 'success' : 'error', text: next.ok ? 'Sync completed.' : 'Sync failed.' });
     } catch (error) {
+      setSyncStatus('Sync failed. No changes were applied unless a backup path is shown.');
       setNotice({ kind: 'error', text: String(error) });
+    } finally {
+      setSyncing(false);
     }
   }
 
@@ -374,8 +384,9 @@ function SyncPage() {
       </div>
       {invalidSkillsSelection && <Notice kind="warning">Select at least one skill or turn off skills sync.</Notice>}
       <div className="actions">
-        <button className="primary" type="button" disabled={!manifest || nothingSelected || invalidSkillsSelection} onClick={syncNow}>Sync</button>
+        <button className="primary" type="button" disabled={!manifest || nothingSelected || invalidSkillsSelection || syncing} onClick={syncNow}>{syncing ? 'Syncing...' : 'Sync'}</button>
       </div>
+      {syncStatus && <div className={`status-line ${syncing ? 'active' : ''}`}>{syncStatus}</div>}
       {result && (
         <div className="result-card">
           <strong>{result.ok ? 'Sync completed' : 'Sync partial'}</strong>

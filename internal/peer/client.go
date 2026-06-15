@@ -15,7 +15,7 @@ type Client struct {
 }
 
 func NewClient() Client {
-	return Client{HTTPClient: &http.Client{Timeout: 3 * time.Second}}
+	return Client{HTTPClient: &http.Client{Timeout: 60 * time.Second}}
 }
 
 func (c Client) Health(input string, port int) (types.PeerStatus, error) {

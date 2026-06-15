@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -133,7 +134,7 @@ func downloadSelected(client peer.Client, req types.SyncRequest, manifest types.
 func downloadFile(client peer.Client, req types.SyncRequest, remotePath, localPath, wantHash string) error {
 	resp, err := client.Download(req.PeerIP, req.Port, remotePath)
 	if err != nil {
-		return err
+		return fmt.Errorf("download failed for %s: %w", remotePath, err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {

@@ -25,9 +25,10 @@ import (
 )
 
 type App struct {
-	ctx      context.Context
-	server   *share.Server
-	serverMu sync.Mutex
+	ctx         context.Context
+	server      *share.Server
+	snapshotDir string
+	serverMu    sync.Mutex
 }
 
 func NewApp() *App {
@@ -94,20 +95,29 @@ func (a *App) StartSharing(req types.ShareRequest) (types.ShareStatus, error) {
 	if req.Port == 0 {
 		req.Port = constants.DefaultPort
 	}
-	manifest, baseDir, err := share.BuildManifest(req)
+	snapshotDir, err := share.CreateSnapshot(req)
 	if err != nil {
+		return types.ShareStatus{}, err
+	}
+	snapshotReq := req
+	snapshotReq.CodexDir = snapshotDir
+	manifest, baseDir, err := share.BuildManifest(snapshotReq)
+	if err != nil {
+		_ = os.RemoveAll(snapshotDir)
 		return types.ShareStatus{}, err
 	}
 	if a.server != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		_ = a.server.Stop(ctx)
 		cancel()
+		_ = os.RemoveAll(a.snapshotDir)
 	}
 	server := share.NewServer(baseDir, req.Port, manifest)
 	if err := server.Start(); err != nil {
 		return types.ShareStatus{}, err
 	}
 	a.server = server
+	a.snapshotDir = snapshotDir
 	localIPs, _ := platform.LocalIPs()
 	url := ""
 	if len(localIPs) > 0 {
@@ -125,7 +135,9 @@ func (a *App) StopSharing() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	err := a.server.Stop(ctx)
+	_ = os.RemoveAll(a.snapshotDir)
 	a.server = nil
+	a.snapshotDir = ""
 	return err
 }
 
