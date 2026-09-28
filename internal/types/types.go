@@ -1,5 +1,174 @@
 package types
 
+import "time"
+
+type Bootstrap struct {
+	Mode            string `json:"mode"`
+	CodexDir        string `json:"codexDir"`
+	CentralHost     string `json:"centralHost"`
+	CentralPort     int    `json:"centralPort"`
+	Port            int    `json:"port"`
+	DeviceName      string `json:"deviceName"`
+	BackupDir       string `json:"backupDir"`
+	Version         string `json:"version"`
+	RestartRequired bool   `json:"restartRequired"`
+}
+
+type SettingsRequest struct {
+	Mode        string `json:"mode"`
+	CodexDir    string `json:"codexDir"`
+	CentralHost string `json:"centralHost"`
+	CentralPort int    `json:"centralPort"`
+	Port        int    `json:"port"`
+	DeviceName  string `json:"deviceName"`
+	BackupDir   string `json:"backupDir"`
+}
+
+type ServerOptions struct {
+	CodexDir       string `json:"codexDir"`
+	Port           int    `json:"port"`
+	AdminJWTIssuer string `json:"adminJWTIssuer,omitempty"`
+	AdminJWTPublic string `json:"adminJWTPublic,omitempty"`
+	PortalLoginURL string `json:"portalLoginURL,omitempty"`
+	AllowTestAuth  bool   `json:"allowTestAuth,omitempty"`
+}
+
+type AdminStatus struct {
+	Running     bool        `json:"running"`
+	Port        int         `json:"port"`
+	CodexDir    string      `json:"codexDir"`
+	Skills      int         `json:"skills"`
+	MCP         int         `json:"mcp"`
+	GeneratedAt time.Time   `json:"generatedAt"`
+	ScanErrors  []ScanError `json:"scanErrors,omitempty"`
+}
+
+type CenterManifest struct {
+	Schema      int           `json:"schema"`
+	App         string        `json:"app"`
+	Version     string        `json:"version"`
+	GeneratedAt time.Time     `json:"generatedAt"`
+	Skills      []CenterSkill `json:"skills"`
+	MCP         []CenterMCP   `json:"mcp"`
+	Errors      []ScanError   `json:"errors,omitempty"`
+}
+type CenterSkill struct {
+	Name   string      `json:"name"`
+	SHA256 string      `json:"sha256"`
+	Files  []FileEntry `json:"files"`
+	Size   int64       `json:"size"`
+}
+type CenterMCP struct {
+	Name   string `json:"name"`
+	SHA256 string `json:"sha256"`
+	Size   int64  `json:"size"`
+}
+type ScanError struct {
+	Path  string `json:"path"`
+	Error string `json:"error"`
+}
+
+const (
+	DiffSame      = "same"
+	DiffNew       = "new"
+	DiffChanged   = "changed"
+	DiffLocalOnly = "local_only"
+)
+
+type DiffItem struct {
+	Kind     string `json:"kind"`
+	Name     string `json:"name"`
+	Status   string `json:"status"`
+	Selected bool   `json:"selected"`
+}
+type ConfigDiff struct {
+	Items []DiffItem `json:"items"`
+}
+type ApplyChange struct {
+	Kind   string `json:"kind"`
+	Name   string `json:"name"`
+	Action string `json:"action"`
+}
+type ApplyRequest struct {
+	CodexDir    string        `json:"codexDir"`
+	CentralHost string        `json:"centralHost"`
+	CentralPort int           `json:"centralPort"`
+	Changes     []ApplyChange `json:"changes"`
+}
+type ApplyResult struct {
+	OK         bool     `json:"ok"`
+	BackupPath string   `json:"backupPath"`
+	RolledBack bool     `json:"rolledBack"`
+	Applied    []string `json:"applied"`
+}
+type ServerStatus struct {
+	Running  bool   `json:"running"`
+	Port     int    `json:"port"`
+	CodexDir string `json:"codexDir"`
+	Skills   int    `json:"skills"`
+	MCP      int    `json:"mcp"`
+	Error    string `json:"error,omitempty"`
+}
+type ConfigRefresh struct {
+	Connected bool           `json:"connected"`
+	Error     string         `json:"error,omitempty"`
+	Manifest  CenterManifest `json:"manifest"`
+	Diff      ConfigDiff     `json:"diff"`
+}
+type ProfileSwitchResult struct {
+	OK                  bool        `json:"ok"`
+	Profile             AuthProfile `json:"profile"`
+	BackupPath          string      `json:"backupPath"`
+	ProviderConflict    bool        `json:"providerConflict"`
+	ConflictDescription string      `json:"conflictDescription,omitempty"`
+}
+type ProfileSwitchPreview struct {
+	Profile             AuthProfile `json:"profile"`
+	Provider            string      `json:"provider"`
+	ProviderConflict    bool        `json:"providerConflict"`
+	ConflictDescription string      `json:"conflictDescription,omitempty"`
+}
+type AuthProfile struct {
+	ID               string `json:"id"`
+	Name             string `json:"name"`
+	Type             string `json:"type"`
+	Provider         string `json:"provider"`
+	Source           string `json:"source"`
+	Active           bool   `json:"active"`
+	APIKeyPreview    string `json:"apiKeyPreview,omitempty"`
+	BaseURL          string `json:"baseUrl,omitempty"`
+	ChatGPTUserID    string `json:"chatgptUserId,omitempty"`
+	ChatGPTExpiresAt string `json:"chatgptExpiresAt,omitempty"`
+	CurrentProfileID string `json:"currentProfileId,omitempty"`
+}
+type CurrentAuthStatus struct {
+	APIKeyPreview    string `json:"apiKeyPreview,omitempty"`
+	BaseURL          string `json:"baseUrl,omitempty"`
+	ChatGPTUserID    string `json:"chatgptUserId,omitempty"`
+	ChatGPTExpiresAt string `json:"chatgptExpiresAt,omitempty"`
+	APIKeyImported   bool   `json:"apiKeyImported"`
+	ChatGPTImported  bool   `json:"chatgptImported"`
+	CurrentProfileID string `json:"currentProfileId,omitempty"`
+}
+type APIKeyProfileRequest struct {
+	Name     string `json:"name"`
+	Provider string `json:"provider"`
+	BaseURL  string `json:"baseUrl"`
+	APIKey   string `json:"apiKey"`
+}
+type BackupInfo struct {
+	Device    string      `json:"device"`
+	Profile   AuthProfile `json:"profile"`
+	Size      int64       `json:"size"`
+	UpdatedAt time.Time   `json:"updatedAt"`
+}
+type RemoteBackup struct {
+	Device    string      `json:"device"`
+	Profile   AuthProfile `json:"profile"`
+	Size      int64       `json:"size"`
+	UpdatedAt time.Time   `json:"updatedAt"`
+}
+
 type ResourceStatus struct {
 	Exists    bool     `json:"exists"`
 	Path      string   `json:"path"`
@@ -18,84 +187,10 @@ type CodexInspection struct {
 	Skills ResourceStatus `json:"skills"`
 }
 
-type ShareRequest struct {
-	CodexDir       string   `json:"codexDir"`
-	Port           int      `json:"port"`
-	ShareConfig    bool     `json:"shareConfig"`
-	ShareAuth      bool     `json:"shareAuth"`
-	ShareSkills    bool     `json:"shareSkills"`
-	ConfigRootKeys []string `json:"configRootKeys,omitempty"`
-	ConfigTables   []string `json:"configTables,omitempty"`
-	Skills         []string `json:"skills,omitempty"`
-}
-
-type ShareStatus struct {
-	Running  bool     `json:"running"`
-	Port     int      `json:"port"`
-	LocalIPs []string `json:"localIPs"`
-	URL      string   `json:"url"`
-}
-
-type PeerStatus struct {
-	OK      bool   `json:"ok"`
-	URL     string `json:"url"`
-	Version string `json:"version"`
-}
-
-type SyncRequest struct {
-	PeerIP         string   `json:"peerIP"`
-	Port           int      `json:"port"`
-	TargetDir      string   `json:"targetDir"`
-	SyncConfig     bool     `json:"syncConfig"`
-	SyncAuth       bool     `json:"syncAuth"`
-	SyncSkills     bool     `json:"syncSkills"`
-	ConfigRootKeys []string `json:"configRootKeys,omitempty"`
-	ConfigTables   []string `json:"configTables,omitempty"`
-	Skills         []string `json:"skills,omitempty"`
-}
-
-type SyncResult struct {
-	OK         bool     `json:"ok"`
-	Items      []string `json:"items"`
-	BackupPath string   `json:"backupPath"`
-}
-
 type FileEntry struct {
 	Path   string `json:"path"`
 	SHA256 string `json:"sha256"`
 	Size   int64  `json:"size"`
-}
-
-type ManifestResource struct {
-	Enabled   bool        `json:"enabled"`
-	Path      string      `json:"path,omitempty"`
-	SHA256    string      `json:"sha256,omitempty"`
-	Size      int64       `json:"size,omitempty"`
-	Sensitive bool        `json:"sensitive,omitempty"`
-	Count     int         `json:"count,omitempty"`
-	Files     []FileEntry `json:"files,omitempty"`
-	RootKeys  []string    `json:"rootKeys,omitempty"`
-	Tables    []string    `json:"tables,omitempty"`
-	Skills    []string    `json:"skills,omitempty"`
-}
-
-type ManifestShared struct {
-	Config ManifestResource `json:"config"`
-	Auth   ManifestResource `json:"auth"`
-	Skills ManifestResource `json:"skills"`
-}
-
-type RemoteManifest struct {
-	Schema  int            `json:"schema"`
-	App     string         `json:"app"`
-	Version string         `json:"version"`
-	Shared  ManifestShared `json:"shared"`
-}
-
-type HealthResponse struct {
-	App     string `json:"app"`
-	Version string `json:"version"`
-	Port    int    `json:"port"`
 }
 
 type UpdateAsset struct {

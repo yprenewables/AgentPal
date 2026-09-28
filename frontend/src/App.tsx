@@ -1,594 +1,194 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { DirectoryPicker, Notice } from './components';
-import { api, type CodexInspection, type RemoteManifest, type ShareStatus, type SyncResult, type UpdateInfo } from './wails';
+import { api, type ApplyChange, type AuthProfile, type BackupInfo, type Bootstrap, type ConfigRefresh, type CurrentAuthStatus, type SettingsRequest } from './wails';
 
-type Selection = { config: boolean; auth: boolean; skills: boolean };
-type ConfigSelection = { rootKeys: string[]; tables: string[] };
-type ResourceKey = keyof Selection;
-
-const defaultSelection: Selection = { config: false, auth: false, skills: false };
-const emptyConfigSelection: ConfigSelection = { rootKeys: [], tables: [] };
-const resourceKeys: ResourceKey[] = ['config', 'auth', 'skills'];
-
-function defaultConfigSelection(rootKeys: string[] = [], tables: string[] = []): ConfigSelection {
-  return { rootKeys, tables: tables.filter((table) => !isMachineSpecificTable(table)) };
-}
-
-function isMachineSpecificTable(table: string) {
-  return table === 'projects' || table.startsWith('projects.');
-}
-
-type ResourcePanelProps = {
-  values: Selection;
-  onChange(values: Selection): void;
-  details: Partial<Record<ResourceKey, ReactNode>>;
-  counts?: Partial<Record<ResourceKey, string>>;
-  available?: Record<ResourceKey, boolean>;
-  hideUnavailable?: boolean;
-  expandedResource: ResourceKey | null;
-  onExpandedResourceChange(resource: ResourceKey | null): void;
-};
-
-function firstSelectedResource(values: Selection): ResourceKey | null {
-  return resourceKeys.find((key) => key !== 'config' && values[key]) ?? null;
-}
-
-function ResourcePanel({ values, onChange, details, counts, available, hideUnavailable = false, expandedResource, onExpandedResourceChange }: ResourcePanelProps) {
-  function toggle(key: ResourceKey, checked: boolean) {
-    const next = { ...values, [key]: checked };
-    onChange(next);
-    if (!checked && expandedResource === key) {
-      onExpandedResourceChange(firstSelectedResource(next));
-    }
-  }
-
-  function toggleExpanded(key: ResourceKey) {
-    onExpandedResourceChange(expandedResource === key ? null : key);
-  }
-
-  return (
-    <section className="resource-panel">
-      <div className="resource-list" role="list" aria-label="Resources">
-        {resourceKeys.map((key) => {
-          const enabled = available ? available[key] : true;
-          if (hideUnavailable && !enabled) return null;
-          const selected = values[key];
-          const expanded = expandedResource === key;
-          const count = selected ? counts?.[key] ?? '1/1' : '0/1';
-          return (
-            <article className={`resource-card ${!enabled ? 'disabled' : ''}`} key={key} role="listitem">
-              <div className="resource-summary-row" role="button" tabIndex={enabled ? 0 : -1} onClick={() => enabled && toggleExpanded(key)} onKeyDown={(event) => { if (!enabled) return; if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); toggleExpanded(key); } }}>
-                <label className="resource-toggle" onClick={(event) => event.stopPropagation()}>
-                  <input type="checkbox" disabled={!enabled} checked={selected && enabled} onChange={(event) => toggle(key, event.target.checked)} />
-                  <div className="resource-copy">
-                    <strong>{resourceLabel(key)}</strong>
-                  </div>
-                </label>
-                <span className="selection-count">{count}</span>
-                <span className={`resource-chevron ${expanded ? 'open' : ''}`}>⌄</span>
-              </div>
-              {expanded && selected && enabled ? <div className="resource-detail">{details[key] ?? <div className="detail-empty">No details available.</div>}</div> : null}
-            </article>
-          );
-        })}
-      </div>
-    </section>
-  );
-}
-
-function resourceLabel(key: ResourceKey) {
-  switch (key) {
-    case 'config':
-      return 'config.toml';
-    case 'auth':
-      return 'auth.json';
-    case 'skills':
-      return 'skills';
-  }
-}
+type Tab = 'configuration' | 'authentication' | 'backups';
 
 export default function App() {
-  const [page, setPage] = useState<'share' | 'sync'>('share');
-  const [update, setUpdate] = useState<UpdateInfo | null>(null);
-  const [updateNotice, setUpdateNotice] = useState<string | null>(null);
-
-  async function checkUpdate() {
-    if (!api) return;
-    try {
-      const next = await api.CheckForUpdate();
-      setUpdate(next);
-      setUpdateNotice(next.hasUpdate ? null : `Already on latest version ${next.currentVersion}.`);
-    } catch (error) {
-      setUpdateNotice(String(error));
-    }
-  }
-
-  async function openRelease() {
-    if (!api || !update?.releaseUrl) return;
-    await api.OpenURL(update.releaseUrl);
-  }
-
-  return (
-    <main>
-      <header>
-        <div>
-          <p className="eyebrow">AgentPal</p>
-          <h1>Codex sync</h1>
-        </div>
-        <nav aria-label="Primary sections">
-          <button className={`nav-button ${page === 'share' ? 'active' : ''}`} onClick={() => setPage('share')}>Share</button>
-          <button className={`nav-button ${page === 'sync' ? 'active' : ''}`} onClick={() => setPage('sync')}>Sync</button>
-        </nav>
-      </header>
-      {!api && <Notice kind="warning">Backend bridge is unavailable. Run this inside Wails for full functionality.</Notice>}
-      <section className="update-strip">
-        <div>
-          <strong>Updates</strong>
-          <span>{update?.hasUpdate ? `New version ${update.latestVersion} available` : updateNotice ?? 'Check GitHub Releases for a newer build.'}</span>
-        </div>
-        <div className="update-actions">
-          <button className="secondary" type="button" onClick={checkUpdate}>Check</button>
-          {update?.hasUpdate && <button className="primary" type="button" onClick={openRelease}>Download</button>}
-        </div>
-      </section>
-      {page === 'share' ? <SharePage /> : <SyncPage />}
-    </main>
-  );
+  const [bootstrap, setBootstrap] = useState<Bootstrap | null>(null);
+  const [error, setError] = useState('');
+  useEffect(() => { void api?.GetBootstrap().then(setBootstrap).catch((reason) => setError(String(reason))); }, []);
+  if (!api) return <main className="shell"><Notice kind="warning">Backend bridge is unavailable. Run AgentPal inside Wails.</Notice></main>;
+  if (error) return <main className="shell"><Notice kind="error">{error}</Notice></main>;
+  if (!bootstrap) return <main className="shell loading">Loading AgentPal...</main>;
+  return bootstrap.mode === 'server' ? <ServerApp bootstrap={bootstrap} /> : <ClientApp bootstrap={bootstrap} />;
 }
 
-function SharePage() {
-  const [dir, setDir] = useState('~/.codex');
-  const [inspection, setInspection] = useState<CodexInspection | null>(null);
-  const [selected, setSelected] = useState<Selection>(defaultSelection);
-  const [configSelection, setConfigSelection] = useState<ConfigSelection>(emptyConfigSelection);
-  const [skillSelection, setSkillSelection] = useState<string[]>([]);
-  const [expandedResource, setExpandedResource] = useState<ResourceKey | null>(null);
-  const [status, setStatus] = useState<ShareStatus | null>(null);
-  const [notice, setNotice] = useState<{ kind: 'success' | 'warning' | 'error' | 'info'; text: string } | null>(null);
+function ClientApp({ bootstrap }: { bootstrap: Bootstrap }) {
+  const [tab, setTab] = useState<Tab>('configuration');
+  const [refresh, setRefresh] = useState<ConfigRefresh | null>(null);
+  const [profiles, setProfiles] = useState<AuthProfile[]>([]);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [notice, setNotice] = useState<{ kind: NoticeKind; text: string } | null>(null);
+  const [version, setVersion] = useState<string>(`v${bootstrap.version}`);
 
-  useEffect(() => {
+  async function loadConfiguration() {
     if (!api) return;
-    void api.GetDefaultCodexDir()
-      .then((path) => {
-        setDir(path);
-        return inspect(path);
-      })
-      .catch(() => inspect(dir));
-  }, []);
-
-  async function inspect(path: string) {
-    if (!api) return;
-    try {
-      const next = await api.InspectCodexDir(path);
-      setInspection(next);
-      setSelected({ config: next.config.exists, auth: false, skills: next.skills.exists });
-      setConfigSelection(defaultConfigSelection(next.config.rootKeys, next.config.tables));
-      setSkillSelection(next.skills.skills ?? []);
-      setExpandedResource(null);
-      setNotice(null);
-    } catch (error) {
-      setNotice({ kind: 'error', text: String(error) });
-    }
+    const next = await api.RefreshConfiguration(); setRefresh(next);
+    if (!next.connected) setNotice({ kind: 'warning', text: next.error || 'Central node is offline.' });
+    else setNotice(null);
   }
+  async function loadProfiles() { if (api) setProfiles(await api.ListAuthProfiles()); }
+  useEffect(() => { void loadConfiguration(); void loadProfiles(); void api?.CheckForUpdate().then((info) => setVersion(info.hasUpdate ? `a newer version discovered · update` : `v${info.currentVersion} (latest)`)).catch(() => undefined); }, []);
 
-  async function browse() {
-    if (!api) return;
-    const path = await api.BrowseFolder();
-    if (path) {
-      setDir(path);
-      await inspect(path);
-    }
-  }
-
-  async function start() {
-    if (!api) return;
-    try {
-      const next = await api.StartSharing({
-        codexDir: dir,
-        port: 28888,
-        shareConfig: selected.config,
-        shareAuth: selected.auth,
-        shareSkills: selected.skills,
-        configRootKeys: configSelection.rootKeys,
-        configTables: configSelection.tables,
-        skills: skillSelection,
-      });
-      setStatus(next);
-      setNotice({ kind: 'success', text: 'Sharing is running.' });
-    } catch (error) {
-      setNotice({ kind: 'error', text: String(error) });
-    }
-  }
-
-  async function stop() {
-    if (!api) return;
-    await api.StopSharing();
-    setStatus(null);
-    setNotice({ kind: 'info', text: 'Sharing stopped.' });
-  }
-
-  const nothingSelected = !selected.config && !selected.auth && !selected.skills;
-  const invalidSkillsSelection = selected.skills && skillSelection.length === 0;
-  const details = inspection
-    ? {
-        config: selected.config && inspection.config.exists ? (
-          <ConfigSectionPicker
-            rootKeys={inspection.config.rootKeys ?? []}
-            tables={inspection.config.tables ?? []}
-            selection={configSelection}
-            onChange={setConfigSelection}
-          />
-        ) : undefined,
-        auth: selected.auth && inspection.auth.exists ? <AuthNotice kind="warning" /> : undefined,
-        skills: selected.skills && inspection.skills.exists ? (
-          <SkillPicker skills={inspection.skills.skills ?? []} selected={skillSelection} onChange={setSkillSelection} />
-        ) : undefined,
-      }
-    : {};
-  const counts = inspection
-    ? {
-        config: `${configSelection.rootKeys.length + configSelection.tables.length}/${(inspection.config.rootKeys ?? []).length + (inspection.config.tables ?? []).length}`,
-        skills: `${skillSelection.length}/${(inspection.skills.skills ?? []).length}`,
-      }
-    : {};
-
-  return (
-    <section className="panel">
-      <DirectoryPicker label="Codex Directory" value={dir} onChange={setDir} onBrowse={browse} />
-      {inspection && (
-        <ResourcePanel
-          values={selected}
-          onChange={setSelected}
-          details={details}
-          counts={counts}
-          available={{ config: inspection.config.exists, auth: inspection.auth.exists, skills: inspection.skills.exists }}
-          expandedResource={expandedResource}
-          onExpandedResourceChange={setExpandedResource}
-        />
-      )}
-      {!inspection && <Notice kind="info">Pick a directory to load the available resources.</Notice>}
-      {nothingSelected && <Notice kind="warning">Select at least one existing resource before opening sharing.</Notice>}
-      {invalidSkillsSelection && <Notice kind="warning">Select at least one skill or turn off skills sharing.</Notice>}
-      <div className="actions">
-        <button className="primary" type="button" disabled={nothingSelected || invalidSkillsSelection} onClick={start}>Start</button>
-        <button className="danger" type="button" onClick={stop}>Stop</button>
-      </div>
-      {status?.running && <Notice kind="success">Share this address: {status.localIPs.join(', ') || status.url}:28888</Notice>}
-      {notice && <Notice kind={notice.kind}>{notice.text}</Notice>}
-    </section>
-  );
+  return <main className="shell">
+    <header className="topbar"><div><div className="brand">AgentPal</div><small>Codex configuration client</small></div><div className="top-actions"><span className={`connection-dot ${refresh?.connected ? 'online' : ''}`}>● {refresh?.connected ? 'Central connected' : 'Central offline'}</span><button className="icon-button" aria-label="Open menu" onClick={() => setMenuOpen(!menuOpen)}>•••</button>{menuOpen && <Menu bootstrap={bootstrap} onRefresh={loadConfiguration} onSettings={() => setShowSettings(true)} onClose={() => setMenuOpen(false)} />}</div></header>
+    <section className="node-strip"><strong>{bootstrap.centralHost}:{bootstrap.centralPort}</strong><span>Central configuration node</span><button className="text-button" onClick={() => void loadConfiguration()}>Refresh</button></section>
+    <nav className="tabs" aria-label="AgentPal sections">{(['configuration', 'authentication', 'backups'] as Tab[]).map((item) => <button key={item} className={tab === item ? 'tab active' : 'tab'} onClick={() => { setTab(item); if (item === 'authentication') void loadProfiles(); }}>{labelForTab(item)}</button>)}</nav>
+    {notice && <Notice kind={notice.kind}>{notice.text}</Notice>}
+    {tab === 'configuration' && <ConfigurationTab refresh={refresh} onRefresh={loadConfiguration} setNotice={setNotice} />}
+    {tab === 'authentication' && <AuthenticationTabCompact profiles={profiles} reload={loadProfiles} setNotice={setNotice} />}
+    {tab === 'backups' && <BackupsTab setNotice={setNotice} />}
+    {showSettings && <SettingsDialog bootstrap={bootstrap} onClose={() => setShowSettings(false)} setNotice={setNotice} />}
+    <div className="version-status">{version}</div>
+  </main>;
 }
 
-function SyncPage() {
-  const [peerIP, setPeerIP] = useState('');
-  const [targetDir, setTargetDir] = useState('~/.codex');
-  const [manifest, setManifest] = useState<RemoteManifest | null>(null);
-  const [selected, setSelected] = useState<Selection>(defaultSelection);
-  const [configSelection, setConfigSelection] = useState<ConfigSelection>(emptyConfigSelection);
-  const [skillSelection, setSkillSelection] = useState<string[]>([]);
-  const [expandedResource, setExpandedResource] = useState<ResourceKey | null>(null);
-  const [result, setResult] = useState<SyncResult | null>(null);
-  const [backupExamplePath, setBackupExamplePath] = useState('~/.agentpal/backups/YYYYMMDD-HHMMSS');
-  const [notice, setNotice] = useState<{ kind: 'success' | 'warning' | 'error' | 'info'; text: string } | null>(null);
-  const [syncStatus, setSyncStatus] = useState('');
-  const [syncing, setSyncing] = useState(false);
+function ConfigurationTab({ refresh, onRefresh, setNotice }: { refresh: ConfigRefresh | null; onRefresh: () => Promise<void>; setNotice: (value: { kind: NoticeKind; text: string } | null) => void }) {
+  const [selected, setSelected] = useState<Record<string, boolean>>({});
+  const [applying, setApplying] = useState(false);
+  const items = refresh?.diff?.items ?? [];
+  useEffect(() => { setSelected(Object.fromEntries(items.map((item) => [`${item.kind}:${item.name}`, item.selected]))); }, [refresh]);
+  if (!refresh?.connected) return <section className="workspace empty-state"><div className="status-symbol">!</div><h1>Connect to the central node</h1><p>AgentPal could not load the latest Skills and MCP configuration.</p><button className="primary" onClick={() => void onRefresh()}>Retry connection</button></section>;
+  const changes = items.filter((item) => item.status !== 'same');
+  async function apply() { if (!api || !changes.length) return; setApplying(true); const selectedChanges: ApplyChange[] = changes.filter((item) => selected[`${item.kind}:${item.name}`]).map((item) => ({ kind: item.kind, name: item.name, action: item.status === 'local_only' ? 'delete' : 'apply' })); try { const result = await api.ApplyConfiguration({ changes: selectedChanges }); setNotice({ kind: result.ok ? 'success' : 'error', text: result.ok ? `Configuration applied. Backup: ${result.backupPath}` : `Configuration rolled back. Backup: ${result.backupPath}` }); await onRefresh(); } catch (error) { setNotice({ kind: 'error', text: String(error) }); } finally { setApplying(false); } }
+  return <section className="workspace"><div className="section-heading"><div><h1>Available updates</h1><p>Review central changes before applying them to this Mac.</p></div><span className={changes.length ? 'badge attention' : 'badge'}>{changes.length} updates</span></div><div className="resource-list">{items.map((item) => <label className="resource-row" key={`${item.kind}:${item.name}`}><input type="checkbox" checked={!!selected[`${item.kind}:${item.name}`]} onChange={(event) => setSelected({ ...selected, [`${item.kind}:${item.name}`]: event.target.checked })} /><span><strong>{item.name}</strong><small>{item.kind === 'skill' ? 'Skill' : 'MCP server'}</small></span><em className={`diff-${item.status}`}>{statusLabel(item.status)}</em></label>)}</div><button className="primary" disabled={applying || !changes.some((item) => selected[`${item.kind}:${item.name}`])} onClick={() => void apply()}>{applying ? 'Applying...' : 'Review and apply'}</button></section>;
+}
 
-  useEffect(() => {
-    if (!api) return;
-    void api.GetDefaultCodexDir().then(setTargetDir).catch(() => setTargetDir('~/.codex'));
-    void api.GetBackupExamplePath().then(setBackupExamplePath).catch(() => setBackupExamplePath('~/.agentpal/backups/YYYYMMDD-HHMMSS'));
-  }, []);
+function AuthenticationTab({ profiles, reload, setNotice }: { profiles: AuthProfile[]; reload: () => Promise<void>; setNotice: (value: { kind: NoticeKind; text: string } | null) => void }) {
+  const [showKey, setShowKey] = useState(false); const [name, setName] = useState(''); const [provider, setProvider] = useState('openai'); const [model, setModel] = useState(''); const [baseUrl, setBaseUrl] = useState('https://api.openai.com/v1'); const [key, setKey] = useState(''); const [current, setCurrent] = useState<{ apiKeyPreview?: string; baseUrl?: string; chatgptUserId?: string; chatgptExpiresAt?: string; apiKeyImported: boolean; chatgptImported: boolean } | null>(null);
+  useEffect(() => { void api?.GetCurrentAuthStatus().then(setCurrent).catch(() => setCurrent(null)); }, [profiles]);
+  async function create() { if (!api) return; try { await api.CreateAPIKeyProfile({ name, provider, baseUrl, apiKey: key }); setShowKey(false); setKey(''); await reload(); setNotice({ kind: 'success', text: 'API Key profile created.' }); } catch (error) { setNotice({ kind: 'error', text: String(error) }); } }
+  async function activate(id: string) { if (!api) return; try { const result = await api.ActivateAuthProfile(id); setNotice({ kind: 'success', text: `Profile activated. Backup: ${result.backupPath}` }); await reload(); } catch (error) { setNotice({ kind: 'error', text: String(error) }); } }
+  async function importAPIKey() { if (!api) return; try { await api.ImportCurrentAPIKey('Current API Key'); await reload(); setNotice({ kind: 'success', text: 'Current API Key imported.' }); } catch (error) { setNotice({ kind: 'error', text: String(error) }); } }
+  async function importChatGPT() { if (!api) return; try { await api.ImportCurrentAuth('Current ChatGPT login'); await reload(); setNotice({ kind: 'success', text: 'Current ChatGPT login imported.' }); } catch (error) { setNotice({ kind: 'error', text: String(error) }); } }
+  const showCurrentPreview = !!current && !((current.apiKeyImported && current.apiKeyPreview) || (current.chatgptImported && current.chatgptUserId));
+  return <section className="workspace"><div className="section-heading"><div><h1>Authentication profiles</h1><p>Switch local ChatGPT logins and API Key configurations without replacing MCP or Projects.</p></div><div className="button-row"><button className="primary" onClick={() => setShowKey(true)}>New API Key</button></div></div>{showCurrentPreview && <div className="current-auth"><div className="current-auth-line">{current?.apiKeyPreview ? <><strong>API KEY: {current.apiKeyPreview}</strong><span>{current.baseUrl || 'base_url not detected'}</span><button className="secondary" onClick={() => void importAPIKey()}>Import</button></> : current?.chatgptUserId ? <><strong>ChatGPT User ID: {current.chatgptUserId}</strong><span>expire at: {current.chatgptExpiresAt || 'unknown'}</span><button className="secondary" onClick={() => void importChatGPT()}>Import</button></> : <strong>Authentication: Not detected</strong>}</div></div>}<div className="profile-list">{profiles.length === 0 && <div className="empty-inline">No local profiles yet.</div>}{profiles.map((profile) => <article className={`profile-row ${profile.active ? 'active' : ''}`} key={profile.id}><div><strong>{profile.name}</strong><small>{profile.type} · {profile.provider} · {profile.model}{profile.apiKeyPreview ? ` · ${profile.apiKeyPreview} · ${profile.baseUrl || 'no base_url'}` : profile.chatgptUserId ? ` · user_id ${profile.chatgptUserId}` : ''}</small></div><div className="profile-actions">{profile.active && <span className="badge success-badge">Current</span>}{!profile.active && <button className="secondary" onClick={() => void activate(profile.id)}>Switch</button>}</div></article>)}</div>{showKey && <div className="dialog-backdrop"><div className="dialog"><div className="section-heading"><h2>New API Key profile</h2><button className="icon-button" onClick={() => setShowKey(false)}>×</button></div><label className="field"><span>Name</span><input value={name} onChange={(event) => setName(event.target.value)} /></label><label className="field"><span>Provider</span><input value={provider} onChange={(event) => setProvider(event.target.value)} /></label><label className="field"><span>Model</span><input value={model} onChange={(event) => setModel(event.target.value)} /></label><label className="field"><span>Base URL</span><input value={baseUrl} onChange={(event) => setBaseUrl(event.target.value)} /></label><label className="field"><span>API Key</span><input type="password" value={key} onChange={(event) => setKey(event.target.value)} /></label><button className="primary" onClick={() => void create()}>Create profile</button></div></div>}</section>;
+}
 
-  async function testConnection() {
+function AuthenticationTabCompact({ profiles, reload, setNotice }: { profiles: AuthProfile[]; reload: () => Promise<void>; setNotice: (value: { kind: NoticeKind; text: string } | null) => void }) {
+  const [current, setCurrent] = useState<CurrentAuthStatus | null>(null);
+  const [showKey, setShowKey] = useState(false);
+  const [name, setName] = useState('');
+  const [provider, setProvider] = useState('openai');
+  const [model, setModel] = useState('');
+  const [baseUrl, setBaseUrl] = useState('https://api.openai.com/v1');
+  const [key, setKey] = useState('');
+  const [confirmAction, setConfirmAction] = useState<{ kind: 'switch' | 'delete'; profile?: AuthProfile; description?: string } | null>(null);
+
+  useEffect(() => { void api?.GetCurrentAuthStatus().then(setCurrent).catch(() => setCurrent(null)); }, [profiles]);
+
+  async function importCurrentAPIKey() {
     if (!api) return;
+    try { await api.ImportCurrentAPIKey('Current API Key'); await reload(); setNotice({ kind: 'success', text: 'Current API Key imported.' }); } catch (error) { setNotice({ kind: 'error', text: String(error) }); }
+  }
+
+  async function importCurrentChatGPT() {
+    if (!api) return;
+    try { await api.ImportCurrentAuth('Current ChatGPT login'); await reload(); setNotice({ kind: 'success', text: 'Current ChatGPT login imported.' }); } catch (error) { setNotice({ kind: 'error', text: String(error) }); }
+  }
+
+  async function createAPIKeyProfile() {
+    if (!api) return;
+    try { await api.CreateAPIKeyProfile({ name, provider, baseUrl, apiKey: key }); setShowKey(false); setKey(''); await reload(); setNotice({ kind: 'success', text: 'API Key profile created.' }); } catch (error) { setNotice({ kind: 'error', text: String(error) }); }
+  }
+
+  async function activate(id: string) {
+    if (!api) { setNotice({ kind: 'error', text: 'AgentPal backend is not available. Restart the desktop client.' }); return; }
+    setNotice({ kind: 'info', text: 'Switching authentication profile...' });
     try {
-      const status = await api.TestConnection(peerIP);
-      const next = await api.FetchRemoteManifest(peerIP);
-      setManifest(next);
-      setSelected({ config: next.shared.config.enabled, auth: next.shared.auth.enabled, skills: next.shared.skills.enabled });
-      setConfigSelection(defaultConfigSelection(next.shared.config.rootKeys, next.shared.config.tables));
-      setSkillSelection(next.shared.skills.skills ?? []);
-      setExpandedResource(null);
-      setNotice({ kind: 'success', text: `Connected to ${status.url} running ${status.version}.` });
+      const preview = await api.PreviewAuthProfile(id);
+      if (preview.providerConflict) {
+        setConfirmAction({ kind: 'switch', profile: profiles.find((profile) => profile.id === id), description: preview.conflictDescription });
+        return;
+      }
+      const result = await api.ActivateAuthProfileWithConflict(id, false);
+      if (result.providerConflict) { setNotice({ kind: 'warning', text: result.conflictDescription || 'Provider configuration conflict. Nothing was changed.' }); return; }
+      setNotice({ kind: 'success', text: `Profile activated. Backup: ${result.backupPath}` }); await reload();
+    } catch (error) { setNotice({ kind: 'error', text: String(error) }); }
+  }
+
+  async function removeProfile(profile: AuthProfile) {
+    if (profile.active) { setNotice({ kind: 'warning', text: 'Switch to another profile before deleting the current profile.' }); return; }
+    if (!api) { setNotice({ kind: 'error', text: 'AgentPal backend is not available. Restart the desktop client.' }); return; }
+    setConfirmAction({ kind: 'delete', profile });
+  }
+
+  async function confirmActionNow() {
+    if (!api || !confirmAction) return;
+    const action = confirmAction;
+    setConfirmAction(null);
+    setNotice({ kind: 'info', text: action.kind === 'delete' ? 'Deleting authentication profile...' : 'Switching authentication profile...' });
+    try {
+      if (action.kind === 'delete' && action.profile) {
+        await api.DeleteAuthProfile(action.profile.id);
+        await reload();
+        setNotice({ kind: 'success', text: `Deleted local profile ${action.profile.name}.` });
+      } else if (action.kind === 'switch' && action.profile) {
+        const result = await api.ActivateAuthProfileWithConflict(action.profile.id, true);
+        if (result.providerConflict) { setNotice({ kind: 'warning', text: result.conflictDescription || 'Provider configuration conflict. Nothing was changed.' }); return; }
+        setNotice({ kind: 'success', text: `Profile activated. Backup: ${result.backupPath}` });
+        await reload();
+      }
     } catch (error) {
       setNotice({ kind: 'error', text: String(error) });
     }
   }
 
-  async function browse() {
-    if (!api) return;
-    const path = await api.BrowseFolder();
-    if (path) setTargetDir(path);
-  }
-
-  async function syncNow() {
-    if (!api) return;
-    setSyncing(true);
-    setResult(null);
-    setSyncStatus('Preparing sync...');
-    try {
-      setSyncStatus('Downloading and verifying selected resources...');
-      const next = await api.SyncFromPeer({
-        peerIP,
-        port: 28888,
-        targetDir,
-        syncConfig: selected.config,
-        syncAuth: selected.auth,
-        syncSkills: selected.skills,
-        configRootKeys: configSelection.rootKeys,
-        configTables: configSelection.tables,
-        skills: skillSelection,
-      });
-      setResult(next);
-      setSyncStatus(next.ok ? 'Sync completed.' : 'Sync partially failed. Check the backup path below.');
-      setNotice({ kind: next.ok ? 'success' : 'error', text: next.ok ? 'Sync completed.' : 'Sync failed.' });
-    } catch (error) {
-      setSyncStatus('Sync failed. No changes were applied unless a backup path is shown.');
-      setNotice({ kind: 'error', text: String(error) });
-    } finally {
-      setSyncing(false);
-    }
-  }
-
-  const available = manifest ? { config: manifest.shared.config.enabled, auth: manifest.shared.auth.enabled, skills: manifest.shared.skills.enabled } : undefined;
-  const nothingSelected = !selected.config && !selected.auth && !selected.skills;
-  const invalidSkillsSelection = selected.skills && skillSelection.length === 0;
-  const details = manifest
-    ? {
-        config: selected.config && manifest.shared.config.enabled ? (
-          <ConfigSectionPicker
-            rootKeys={manifest.shared.config.rootKeys ?? []}
-            tables={manifest.shared.config.tables ?? []}
-            selection={configSelection}
-            onChange={setConfigSelection}
-          />
-        ) : undefined,
-        auth: selected.auth && manifest.shared.auth.enabled ? <AuthNotice kind="warning" /> : undefined,
-        skills: selected.skills && manifest.shared.skills.enabled ? (
-          <SkillPicker skills={manifest.shared.skills.skills ?? []} selected={skillSelection} onChange={setSkillSelection} />
-        ) : undefined,
-      }
-    : {};
-  const counts = manifest
-    ? {
-        config: `${configSelection.rootKeys.length + configSelection.tables.length}/${(manifest.shared.config.rootKeys ?? []).length + (manifest.shared.config.tables ?? []).length}`,
-        skills: `${skillSelection.length}/${(manifest.shared.skills.skills ?? []).length}`,
-      }
-    : {};
-
-  return (
-    <section className="panel">
-      <div className="peer-row">
-        <label className="field compact">
-          <span>Peer IP</span>
-          <input value={peerIP} placeholder="192.168.1.23" onChange={(event) => setPeerIP(event.target.value)} />
-        </label>
-        <button className="secondary nowrap" type="button" onClick={testConnection}>Connect</button>
-      </div>
-      {notice && <Notice kind={notice.kind}>{notice.text}</Notice>}
-      {manifest && (
-        <ResourcePanel
-          values={selected}
-          onChange={setSelected}
-          details={details}
-          counts={counts}
-          available={available}
-          hideUnavailable
-          expandedResource={expandedResource}
-          onExpandedResourceChange={setExpandedResource}
-        />
-      )}
-      <div className="sync-bottom">
-        <DirectoryPicker label="Target Codex Directory" value={targetDir} onChange={setTargetDir} onBrowse={browse} />
-        <Notice kind="warning">Backup first. `skills` replaces only selected skill folders. Backup: <code>{backupExamplePath}</code></Notice>
-      </div>
-      {invalidSkillsSelection && <Notice kind="warning">Select at least one skill or turn off skills sync.</Notice>}
-      <div className="actions">
-        <button className="primary" type="button" disabled={!manifest || nothingSelected || invalidSkillsSelection || syncing} onClick={syncNow}>{syncing ? 'Syncing...' : 'Sync'}</button>
-      </div>
-      {syncStatus && <div className={`status-line ${syncing ? 'active' : ''}`}>{syncStatus}</div>}
-      {result && (
-        <div className="result-card">
-          <strong>{result.ok ? 'Sync completed' : 'Sync partial'}</strong>
-          <span>{result.items.join(', ')}</span>
-          <code>{result.backupPath || 'No backup needed'}</code>
-        </div>
-      )}
-    </section>
-  );
-}
-
-function AuthNotice({ kind }: { kind: 'warning' }) {
-  return <Notice kind={kind}>auth.json may contain credentials. Share it only with trusted machines.</Notice>;
-}
-
-type ConfigSectionPickerProps = {
-  rootKeys: string[];
-  tables: string[];
-  selection: ConfigSelection;
-  onChange(selection: ConfigSelection): void;
-};
-
-function ConfigSectionPicker({ rootKeys, tables, selection, onChange }: ConfigSectionPickerProps) {
-  function toggleRootKey(value: string) {
-    const current = selection.rootKeys;
-    const next = current.includes(value) ? current.filter((item) => item !== value) : [...current, value];
-    onChange({ ...selection, rootKeys: next });
-  }
-
-  return (
-    <div className="inline-section-body">
-      <ConfigRootKeyGroup items={rootKeys} selected={selection.rootKeys} onToggle={toggleRootKey} onAll={() => onChange({ ...selection, rootKeys })} />
-      <ConfigTableTree tables={tables} selected={selection.tables} onChange={(nextTables) => onChange({ ...selection, tables: nextTables })} />
+  const hasCurrentProfile = profiles.some((profile) => profile.active);
+  return <section className="workspace">
+    <div className="section-heading">
+      <div><h1>Authentication</h1><p>Choose one local API Key or ChatGPT profile.</p></div>
+      <button className="primary" onClick={() => setShowKey(true)}>New API Key</button>
     </div>
-  );
-}
-
-type ConfigRootKeyGroupProps = {
-  items: string[];
-  selected: string[];
-  onToggle(value: string): void;
-  onAll(): void;
-};
-
-function ConfigRootKeyGroup({ items, selected, onToggle, onAll }: ConfigRootKeyGroupProps) {
-  return (
-    <div className="section-group">
-      {items.length === 0 ? (
-        <small>No root keys.</small>
-      ) : (
-        <div className="section-options">
-          {items.map((item) => (
-            <label key={item}>
-              <input type="checkbox" checked={selected.includes(item)} onChange={() => onToggle(item)} />
-              <span>{item}</span>
-            </label>
-          ))}
-        </div>
-      )}
+    {!hasCurrentProfile && current?.apiKeyPreview && <div className="current-auth"><div className="current-auth-line"><strong>API KEY: {current.apiKeyPreview}</strong><span>{current.baseUrl || 'base_url not detected'}</span><button className="secondary" onClick={() => void importCurrentAPIKey()}>Import</button></div></div>}
+    {!hasCurrentProfile && !current?.apiKeyPreview && current?.chatgptUserId && <div className="current-auth"><div className="current-auth-line"><strong>ChatGPT User ID: {current.chatgptUserId}</strong><span>expire at: {current.chatgptExpiresAt || 'unknown'}</span><button className="secondary" onClick={() => void importCurrentChatGPT()}>Import</button></div></div>}
+    <div className="profile-list">
+      {profiles.length === 0 && <div className="empty-inline">No local profiles yet.</div>}
+      {profiles.map((profile) => <article className={`profile-row ${profile.active ? 'active' : ''}`} key={profile.id}>
+        <div className="profile-main"><strong>{profileTitle(profile)}</strong><small>{profileSummary(profile)}</small></div>
+        <div className="profile-actions">{profile.active ? <span className="badge success-badge">Current</span> : <button className="secondary" onClick={() => void activate(profile.id)}>Select</button>}<button className="danger" disabled={profile.active} title={profile.active ? 'Switch to another profile before deleting this one.' : 'Delete this local profile.'} onClick={() => void removeProfile(profile)}>Delete</button></div>
+      </article>)}
     </div>
-  );
+    {showKey && <div className="dialog-backdrop"><div className="dialog"><div className="section-heading"><h2>New API Key profile</h2><button className="icon-button" onClick={() => setShowKey(false)}>×</button></div><label className="field"><span>Name</span><input value={name} onChange={(event) => setName(event.target.value)} /></label><label className="field"><span>Provider</span><input value={provider} onChange={(event) => setProvider(event.target.value)} /></label><label className="field"><span>Base URL</span><input value={baseUrl} onChange={(event) => setBaseUrl(event.target.value)} /></label><label className="field"><span>API Key</span><input type="password" value={key} onChange={(event) => setKey(event.target.value)} /></label><button className="primary" onClick={() => void createAPIKeyProfile()}>Create profile</button></div></div>}
+    {confirmAction && <div className="dialog-backdrop"><div className="dialog"><div className="section-heading"><h2>{confirmAction.kind === 'delete' ? 'Delete profile?' : 'Provider configuration differs'}</h2><button className="icon-button" onClick={() => setConfirmAction(null)}>×</button></div><p>{confirmAction.kind === 'delete' ? `Delete ${confirmAction.profile?.name || 'this profile'} and its saved credentials? Remote backups and current credentials will not change.` : `${confirmAction.description || 'The local Provider table differs from this profile.'} Only auth.json and model_provider will change; the local Provider table will be kept.`}</p><div className="button-row"><button className="secondary" onClick={() => setConfirmAction(null)}>Cancel</button><button className={confirmAction.kind === 'delete' ? 'danger' : 'primary'} onClick={() => void confirmActionNow()}>{confirmAction.kind === 'delete' ? 'Delete' : 'Switch profile'}</button></div></div></div>}
+  </section>;
 }
 
-type TableNode = {
-  name: string;
-  label: string;
-  fullName: string;
-  selectable: boolean;
-  children: TableNode[];
-};
+function profileTitle(profile: AuthProfile) {
+  if (profile.name === 'Current API Key') return 'API Key';
+  if (profile.name === 'Current ChatGPT login') return 'ChatGPT';
+  return profile.name;
+}
 
-type ConfigTableTreeProps = {
-  tables: string[];
-  selected: string[];
-  onChange(tables: string[]): void;
-};
-
-function ConfigTableTree({ tables, selected, onChange }: ConfigTableTreeProps) {
-  const tree = buildTableTree(tables);
-
-  function toggleNode(node: TableNode) {
-    const descendants = selectableDescendants(node);
-    const selectedSet = new Set(selected);
-    const allSelected = descendants.length > 0 && descendants.every((table) => selectedSet.has(table));
-    for (const table of descendants) {
-      if (allSelected) {
-        selectedSet.delete(table);
-      } else {
-        selectedSet.add(table);
-      }
-    }
-    onChange(tables.filter((table) => selectedSet.has(table)));
+function profileSummary(profile: AuthProfile) {
+  const config = profile.provider;
+  if (profile.type === 'api_key') {
+    return [config, profile.apiKeyPreview, profile.baseUrl || 'no base_url'].filter(Boolean).join(' · ') || 'API Key';
   }
-
-  return (
-    <div className="section-group">
-      {tree.length === 0 ? <small>No tables.</small> : <div className="table-tree">{tree.map((node) => <TableTreeNode key={node.fullName} node={node} selected={selected} onToggle={toggleNode} />)}</div>}
-    </div>
-  );
+  const identity = profile.chatgptUserId ? `${profile.chatgptUserId}${profile.chatgptExpiresAt ? ` · expire at: ${profile.chatgptExpiresAt}` : ''}` : 'ChatGPT';
+  return [config, identity].filter(Boolean).join(' · ');
 }
 
-type TableTreeNodeProps = {
-  node: TableNode;
-  selected: string[];
-  onToggle(node: TableNode): void;
-};
-
-function TableTreeNode({ node, selected, onToggle }: TableTreeNodeProps) {
-  const descendants = selectableDescendants(node);
-  const checked = descendants.length > 0 && descendants.every((table) => selected.includes(table));
-  const partial = !checked && descendants.some((table) => selected.includes(table));
-
-  return (
-    <div className="table-node">
-      <label className={partial ? 'partial' : ''}>
-        <input type="checkbox" checked={checked} onChange={() => onToggle(node)} />
-        <span>{node.label}</span>
-      </label>
-      {node.children.length > 0 && <div className="table-children">{node.children.map((child) => <TableTreeNode key={child.fullName} node={child} selected={selected} onToggle={onToggle} />)}</div>}
-    </div>
-  );
+function BackupsTab({ setNotice }: { setNotice: (value: { kind: NoticeKind; text: string } | null) => void }) {
+  const [backups, setBackups] = useState<BackupInfo[]>([]);
+  const [profiles, setProfiles] = useState<AuthProfile[]>([]);
+  async function load() { if (!api) return; try { setBackups(await api.ListRemoteBackups()); setProfiles(await api.ListAuthProfiles()); } catch (error) { setNotice({ kind: 'error', text: String(error) }); } }
+  useEffect(() => { void load(); }, []);
+  async function upload(id: string) { if (!api) return; try { await api.UploadAuthProfile(id, false); setNotice({ kind: 'success', text: 'Authentication profile uploaded.' }); await load(); } catch (error) { setNotice({ kind: 'error', text: String(error) }); } }
+  async function restore(device: string, id: string) { if (!api) return; try { const profile = await api.RestoreAuthProfile(device, id); setNotice({ kind: 'success', text: `Restored ${profile.name} as a local inactive profile.` }); } catch (error) { setNotice({ kind: 'error', text: String(error) }); } }
+  async function remove(device: string, id: string) { if (!api) return; try { await api.DeleteRemoteBackup(device, id); setNotice({ kind: 'success', text: 'Remote backup deleted.' }); await load(); } catch (error) { setNotice({ kind: 'error', text: String(error) }); } }
+  return <section className="workspace"><div className="section-heading"><div><h1>Authentication backups</h1><p>Restore named profiles from the central node when moving between devices.</p></div><button className="secondary" onClick={() => void load()}>Refresh backups</button></div><Notice kind="warning">Authentication backups contain plaintext credentials and are intended only for a trusted local network.</Notice><div className="backup-actions"><strong>Upload a local profile</strong>{profiles.length === 0 && <span className="empty-inline">No local profiles yet.</span>}{profiles.map((profile) => <button className="secondary" key={profile.id} onClick={() => void upload(profile.id)}>{profile.name}</button>)}</div><div className="profile-list">{backups.length === 0 && <div className="empty-inline">No remote backups found.</div>}{backups.map((backup) => <article className="profile-row" key={`${backup.device}:${backup.profile.id}`}><div><strong>{backup.profile.name}</strong><small>{backup.device} · {backup.profile.type} · {backup.profile.provider}</small></div><div className="button-row"><button className="secondary" onClick={() => void restore(backup.device, backup.profile.id)}>Restore</button><button className="danger" onClick={() => void remove(backup.device, backup.profile.id)}>Delete</button></div></article>)}</div></section>;
 }
-
-function buildTableTree(tables: string[]) {
-  const roots: TableNode[] = [];
-  const byFullName = new Map<string, TableNode>();
-
-  for (const table of tables) {
-    const parts = splitTableName(table);
-    let parentChildren = roots;
-    let fullName = '';
-    for (const part of parts) {
-      fullName = fullName ? `${fullName}.${part}` : part;
-      let node = byFullName.get(fullName);
-      if (!node) {
-        node = { name: part, label: trimTableLabel(part), fullName, selectable: tables.includes(fullName), children: [] };
-        byFullName.set(fullName, node);
-        parentChildren.push(node);
-      }
-      parentChildren = node.children;
-    }
-    const leaf = byFullName.get(table);
-    if (leaf) leaf.selectable = true;
-  }
-  return roots;
+function ServerApp({ bootstrap }: { bootstrap: Bootstrap }) { return <main className="shell"><header className="topbar"><div><div className="brand">AgentPal</div><small>Central configuration node</small></div><span className="connection-dot online">● Server running</span></header><section className="workspace server-workspace"><h1>Central node is running</h1><p>Publishing the configured Codex directory over trusted LAN HTTP.</p><div className="server-grid"><div><small>Listen address</small><strong>0.0.0.0:{bootstrap.port}</strong></div><div><small>Published directory</small><strong>{bootstrap.codexDir}</strong></div><div><small>Backup directory</small><strong>{bootstrap.backupDir}</strong></div></div><Notice kind="warning">Authentication backups are plaintext and unauthenticated in this trusted-network mode.</Notice></section><div className="version-status">v{bootstrap.version}</div></main>; }
+function Menu({ bootstrap, onRefresh, onSettings, onClose }: { bootstrap: Bootstrap; onRefresh: () => Promise<void>; onSettings: () => void; onClose: () => void }) { return <div className="menu-popover"><strong>Settings</strong><small>Central node: {bootstrap.centralHost}:{bootstrap.centralPort}</small><button onClick={() => { onSettings(); onClose(); }}>Central and Codex settings</button><button onClick={() => { void onRefresh(); onClose(); }}>Refresh configuration</button><button onClick={() => { void api?.OpenFolder(bootstrap.codexDir); onClose(); }}>Open Codex folder</button></div>; }
+function SettingsDialog({ bootstrap, onClose, setNotice }: { bootstrap: Bootstrap; onClose: () => void; setNotice: (value: { kind: NoticeKind; text: string } | null) => void }) {
+  const [form, setForm] = useState<SettingsRequest>({ mode: bootstrap.mode, codexDir: bootstrap.codexDir, centralHost: bootstrap.centralHost, centralPort: bootstrap.centralPort, port: bootstrap.port, deviceName: bootstrap.deviceName, backupDir: bootstrap.backupDir });
+  function update<K extends keyof SettingsRequest>(key: K, value: SettingsRequest[K]) { setForm({ ...form, [key]: value }); }
+  async function save() { if (!api) return; try { const result = await api.SaveSettings(form); setNotice({ kind: 'success', text: result.restartRequired ? 'Settings saved. Restart AgentPal to apply the role or server path change.' : 'Settings saved. Refresh to connect with the new center address.' }); onClose(); } catch (error) { setNotice({ kind: 'error', text: String(error) }); } }
+  return <div className="dialog-backdrop"><div className="dialog"><div className="section-heading"><h2>AgentPal settings</h2><button className="icon-button" onClick={onClose}>×</button></div><label className="field"><span>Central host</span><input value={form.centralHost} onChange={(event) => update('centralHost', event.target.value)} /></label><label className="field"><span>Central port</span><input type="number" value={form.centralPort} onChange={(event) => update('centralPort', Number(event.target.value))} /></label><label className="field"><span>Codex directory</span><input value={form.codexDir} onChange={(event) => update('codexDir', event.target.value)} /></label><label className="field"><span>Device name</span><input value={form.deviceName} onChange={(event) => update('deviceName', event.target.value)} /></label><div className="button-row"><button className="secondary" onClick={onClose}>Cancel</button><button className="primary" onClick={() => void save()}>Save settings</button></div></div></div>;
 }
-
-function selectableDescendants(node: TableNode): string[] {
-  const own = node.selectable ? [node.fullName] : [];
-  return [...own, ...node.children.flatMap(selectableDescendants)];
-}
-
-function splitTableName(table: string) {
-  const parts: string[] = [];
-  let current = '';
-  let quote = '';
-  for (const char of table) {
-    if ((char === '"' || char === "'") && quote === '') {
-      quote = char;
-    } else if (char === quote) {
-      quote = '';
-    }
-    if (char === '.' && quote === '') {
-      parts.push(current);
-      current = '';
-    } else {
-      current += char;
-    }
-  }
-  if (current) parts.push(current);
-  return parts;
-}
-
-function trimTableLabel(label: string) {
-  return label.replace(/^['"]|['"]$/g, '');
-}
-
-type SkillPickerProps = {
-  skills: string[];
-  selected: string[];
-  onChange(skills: string[]): void;
-};
-
-function SkillPicker({ skills, selected, onChange }: SkillPickerProps) {
-  function toggle(skill: string) {
-    onChange(selected.includes(skill) ? selected.filter((item) => item !== skill) : [...selected, skill]);
-  }
-
-  return (
-    <div className="inline-section-body">
-      {skills.length === 0 ? (
-        <small>No skills.</small>
-      ) : (
-        <div className="section-options">
-          {skills.map((skill) => (
-            <label key={skill}>
-              <input type="checkbox" checked={selected.includes(skill)} onChange={() => toggle(skill)} />
-              <span>{skill}</span>
-            </label>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
+type NoticeKind = 'info' | 'success' | 'warning' | 'error';
+function Notice({ kind, children }: { kind: NoticeKind; children: ReactNode }) { return <div className={`notice ${kind}`}>{children}</div>; }
+function labelForTab(tab: Tab) { return tab[0].toUpperCase() + tab.slice(1); }
+function statusLabel(status: string) { return status === 'local_only' ? 'Local only' : status[0].toUpperCase() + status.slice(1); }

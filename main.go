@@ -22,11 +22,9 @@ func main() {
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},
-		OnStartup: app.startup,
-		OnShutdown: func(ctx context.Context) {
-			_ = app.StopSharing()
-		},
-		Bind: []interface{}{app},
+		OnStartup:  app.startup,
+		OnShutdown: func(ctx context.Context) { app.shutdown() },
+		Bind:       []interface{}{app},
 	})
 	if err != nil {
 		println("Error:", err.Error())

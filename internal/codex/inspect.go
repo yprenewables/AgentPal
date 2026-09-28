@@ -84,6 +84,23 @@ func inspectSkills(path string) types.ResourceStatus {
 	return status
 }
 
+type SkillSummary struct {
+	Name   string
+	SHA256 string
+}
+
+func ReadSkills(path string) ([]SkillSummary, error) {
+	status := inspectSkills(path)
+	if !status.Exists {
+		return nil, nil
+	}
+	var summaries []SkillSummary
+	for _, name := range status.Skills {
+		summaries = append(summaries, SkillSummary{Name: name})
+	}
+	return summaries, nil
+}
+
 func firstPathSegment(path string) string {
 	path = strings.Trim(path, "/")
 	if path == "" {

@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"errors"
 	"os"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
@@ -236,6 +237,76 @@ func stringSet(values []string) map[string]bool {
 		}
 	}
 	return set
+}
+
+func ReplaceTableSubtrees(target []byte, replacements map[string][]byte, deletePrefixes []string) ([]byte, error) {
+	parsed := splitConfig(target)
+	var out [][]byte
+	if len(bytes.TrimSpace(parsed.root)) > 0 {
+		out = append(out, parsed.root)
+	}
+	for _, section := range parsed.tables {
+		owned := false
+		for prefix := range replacements {
+			if tableOwnedBy(section.name, prefix) {
+				owned = true
+				break
+			}
+		}
+		if !owned {
+			for _, prefix := range deletePrefixes {
+				if tableOwnedBy(section.name, prefix) {
+					owned = true
+					break
+				}
+			}
+		}
+		if !owned {
+			out = append(out, section.bytes)
+		}
+	}
+	keys := make([]string, 0, len(replacements))
+	for key := range replacements {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		fragment := splitConfig(replacements[key])
+		found := false
+		for _, section := range fragment.tables {
+			if tableOwnedBy(section.name, key) {
+				out = append(out, section.bytes)
+				found = true
+			}
+		}
+		if !found {
+			return nil, errors.New("replacement table was not found: " + key)
+		}
+	}
+	return joinSections(out), nil
+}
+
+func tableOwnedBy(name, prefix string) bool {
+	return name == prefix || strings.HasPrefix(name, prefix+".")
+}
+
+func atomicWrite(path string, data []byte, mode os.FileMode) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return err
+	}
+	tmp := path + ".agentpal.tmp"
+	if err := os.WriteFile(tmp, data, mode); err != nil {
+		return err
+	}
+	if err := os.Chmod(tmp, mode); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	return nil
 }
 
 func joinSections(sections [][]byte) []byte {

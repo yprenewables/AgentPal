@@ -1,453 +1,94 @@
 # AgentPal
 
-AgentPal is a simple desktop tool for sharing and syncing Codex configuration between trusted machines on the same network.
+AgentPal 是 Codex 的中心化配置客户端。它从一个 AgentPal Server 拉取 Skills 和 MCP 配置，先展示差异，再由用户确认应用；本机的 ChatGPT 登录和 API Key 通过认证档案管理和切换。
 
-The first version intentionally keeps the system small:
+第一版只支持 Codex、可信局域网 HTTP 和默认端口 `28888`。认证备份为明文且无账号鉴权，只适用于可信内网。
 
-- Desktop GUI built with Go, Wails, and TypeScript
-- macOS and Windows support
-- Codex only
-- Local network HTTP only, no HTTPS
-- Default port: `28888`
-- No account system
-- No cloud service
-- No auto discovery in v1
+## 运行模式
 
-## MVP Goal
+同一个桌面程序通过 `~/.agentpal/config.json` 选择角色。
 
-AgentPal lets one user share selected files from their Codex installation directory, while another user connects by IP address and syncs those files into their own Codex installation directory.
-
-The sharing user only needs to:
-
-1. Open AgentPal.
-2. Select the Codex directory, defaulting to `~/.codex`.
-3. Choose what to share.
-4. Start sharing.
-5. Tell the other user their IP address.
-
-The receiving user only needs to:
-
-1. Open AgentPal.
-2. Enter the sharing user's IP address.
-3. Test the connection.
-4. Review the available items, selected by default.
-5. Select the target Codex directory, defaulting to `~/.codex`.
-6. Click Sync.
-
-## Supported Resources
-
-AgentPal v1 supports exactly these Codex resources:
-
-- `config.toml`
-- `auth.json`
-- `skills/`
-
-`skills/` is synced as a whole directory. v1 does not support selecting individual skills.
-
-`auth.json` is sensitive and must not be selected by default on the sharing side.
-
-## Default Paths
-
-AgentPal uses the user's home directory for defaults.
-
-Codex directory:
-
-```text
-~/.codex
-```
-
-Codex resources:
-
-```text
-~/.codex/config.toml
-~/.codex/auth.json
-~/.codex/skills/
-```
-
-AgentPal state directory:
-
-```text
-~/.agentpal
-```
-
-AgentPal backups:
-
-```text
-~/.agentpal/backups/YYYYMMDD-HHMMSS/
-```
-
-## GUI Scope
-
-The MVP has two main pages.
-
-### Share Page
-
-The Share page is used by the machine that provides Codex configuration.
-
-Fields and actions:
-
-- Codex Directory: defaults to `~/.codex`
-- Browse button
-- Share `config.toml`: selected by default if found
-- Share `auth.json`: not selected by default, even if found
-- Share `skills`: selected by default if found
-- Local IP display
-- Port display: `28888`
-- Open Sharing button
-- Stop Sharing button
-
-Example UI state:
-
-```text
-Share Codex Configuration
-
-Codex Directory
-[ ~/.codex                         ] [Browse]
-
-Share Items
-[x] config.toml    Found
-[ ] auth.json      Found, sensitive
-[x] skills         Found
-
-Local IP
-192.168.1.23
-
-Port
-28888
-
-[Open Sharing] [Stop Sharing]
-```
-
-When sharing is active, AgentPal shows:
-
-```text
-Sharing is running.
-
-Tell the other person to enter this IP:
-192.168.1.23
-```
-
-### Sync Page
-
-The Sync page is used by the receiving machine.
-
-Fields and actions:
-
-- Peer IP input
-- Test Connection button
-- Available item checklist
-- Target Codex Directory: defaults to `~/.codex`
-- Browse button
-- Sync button
-
-The receiving side defaults to selecting every item that the sharing side has made available.
-
-Example UI state:
-
-```text
-Connect To AgentPal
-
-Peer IP
-[ 192.168.1.23                    ]
-
-[Test Connection]
-
-Available Items
-[x] config.toml
-[x] auth.json      Sensitive
-[x] skills         Sync as a whole
-
-Target Codex Directory
-[ ~/.codex                         ] [Browse]
-
-[Sync]
-```
-
-Before syncing, the UI should clearly state:
-
-```text
-Selected items will be backed up and replaced in the target Codex directory.
-```
-
-## Connection Model
-
-The user enters only an IP address.
-
-Example input:
-
-```text
-192.168.1.23
-```
-
-AgentPal internally resolves it to:
-
-```text
-http://192.168.1.23:28888
-```
-
-The implementation may also accept these forms:
-
-```text
-192.168.1.23:28888
-http://192.168.1.23:28888
-http://192.168.1.23:28888/manifest
-```
-
-v1 does not support HTTPS.
-
-## HTTP Protocol
-
-The sharing side runs a local HTTP server on:
-
-```text
-0.0.0.0:28888
-```
-
-Endpoints:
-
-```text
-GET /health
-GET /manifest
-GET /files/config.toml
-GET /files/auth.json
-GET /files/skills/<relative-path>
-```
-
-### Health Response
+Client 示例：
 
 ```json
 {
-  "app": "AgentPal",
-  "version": "0.1.0",
-  "port": 28888
-}
-```
-
-### Manifest Response
-
-```json
-{
-  "schema": 1,
-  "app": "AgentPal",
-  "version": "0.1.0",
-  "shared": {
-    "config": {
-      "enabled": true,
-      "path": "config.toml",
-      "sha256": "...",
-      "size": 1234
-    },
-    "auth": {
-      "enabled": false,
-      "path": "auth.json",
-      "sensitive": true
-    },
-    "skills": {
-      "enabled": true,
-      "count": 8,
-      "files": [
-        {
-          "path": "translation/SKILL.md",
-          "sha256": "...",
-          "size": 1000
-        }
-      ]
-    }
-  }
-}
-```
-
-## Sync Behavior
-
-The receiving side writes selected resources into the target Codex directory.
-
-Mapping:
-
-```text
-remote config.toml -> <target_codex_dir>/config.toml
-remote auth.json   -> <target_codex_dir>/auth.json
-remote skills/**   -> <target_codex_dir>/skills/**
-```
-
-Sync flow:
-
-1. Test the peer connection.
-2. Fetch `/manifest`.
-3. Let the user confirm selected resources.
-4. Download selected files into a temporary directory.
-5. Verify each downloaded file with `sha256`.
-6. Back up existing local files or directories that will be replaced.
-7. Apply files to the target Codex directory.
-8. Write sync history.
-9. Show the result.
-
-## Backup Rules
-
-v1 always backs up before overwriting.
-
-If selected and target exists:
-
-- `config.toml` is backed up, then overwritten.
-- `auth.json` is backed up, then overwritten.
-- `skills/` is backed up as a whole directory, then replaced.
-
-Example backup layout:
-
-```text
-~/.agentpal/backups/20260611-153000/
-  config.toml
-  auth.json
-  skills/
-```
-
-Because `skills/` is replaced as a whole, local-only skills in the target directory will be removed from the active Codex directory after sync. They remain available in the backup.
-
-## Security Rules
-
-AgentPal v1 is intended for trusted local networks only.
-
-Required safety rules:
-
-- Share only explicitly selected resources.
-- Never select `auth.json` by default on the sharing side.
-- Warn that `auth.json` may contain credentials.
-- Reject skill paths containing `../`.
-- Reject absolute skill paths.
-- Reject Windows drive paths such as `C:\...`.
-- Never read outside the selected sharing Codex directory.
-- Never write outside the selected target Codex directory.
-- Ignore `.git`.
-- Ignore `.DS_Store`.
-- Ignore `__pycache__`.
-- Verify every downloaded file with `sha256` before applying it.
-- Download to a temporary directory first, then apply after verification succeeds.
-
-## Local State
-
-AgentPal stores simple local state in `~/.agentpal`.
-
-Example `config.json`:
-
-```json
-{
+  "mode": "client",
   "codex_dir": "~/.codex",
-  "last_peer_ip": "192.168.1.23",
-  "port": 28888
+  "central_host": "10.10.20.11",
+  "central_port": 28888,
+  "device_name": "yp-mac-02"
 }
 ```
 
-Example `history.json`:
+Server 示例：
 
 ```json
-[
-  {
-    "time": "2026-06-11T15:30:00Z",
-    "peer": "192.168.1.23:28888",
-    "target": "~/.codex",
-    "items": ["config.toml", "skills"],
-    "backup": "~/.agentpal/backups/20260611-153000"
-  }
-]
-```
-
-v1 does not need a complex lock file.
-
-## Wails Backend API Draft
-
-The Go backend exposes methods to the TypeScript frontend.
-
-```go
-func (a *App) GetLocalIPs() ([]string, error)
-func (a *App) InspectCodexDir(path string) (CodexInspection, error)
-func (a *App) BrowseFolder() (string, error)
-
-func (a *App) StartSharing(req ShareRequest) (ShareStatus, error)
-func (a *App) StopSharing() error
-
-func (a *App) TestConnection(ip string) (PeerStatus, error)
-func (a *App) FetchRemoteManifest(ip string) (RemoteManifest, error)
-func (a *App) SyncFromPeer(req SyncRequest) (SyncResult, error)
-
-func (a *App) OpenFolder(path string) error
-```
-
-Request structs:
-
-```go
-type ShareRequest struct {
-    CodexDir    string
-    Port        int
-    ShareConfig bool
-    ShareAuth   bool
-    ShareSkills bool
-}
-
-type SyncRequest struct {
-    PeerIP     string
-    Port       int
-    TargetDir  string
-    SyncConfig bool
-    SyncAuth   bool
-    SyncSkills bool
+{
+  "mode": "server",
+  "codex_dir": "~/.codex",
+  "port": 28888,
+  "backup_dir": "~/.agentpal/server/auth-backups",
+  "device_name": "central-node"
 }
 ```
 
-## Suggested Project Structure
+Server 直接读取配置的 Codex 目录。每次清单请求都会重新扫描，因此目录变化会在客户端刷新后体现，不需要手动发布快照。
+
+## 客户端
+
+默认进入 `Configuration` 标签并连接中心节点：
+
+- `Configuration`：比较 Skills 和 `[mcp_servers.*]`，预览新增、修改、本地独有和一致项，确认后应用。
+- `Authentication`：导入当前 Codex 登录、创建 API Key 档案、查看和切换本地档案。
+- `Backups`：按设备查看中心认证备份，上传、恢复或删除均为明确操作。
+
+本地独有的 Skill/MCP 默认保留。下载内容会先校验 SHA-256，应用前创建备份，失败时恢复原配置。恢复中心认证备份只创建本地档案，不会自动激活。
+
+## 认证档案
+
+档案存放在：
 
 ```text
-AgentPal/
-  README.md
-  go.mod
-  main.go
-  app.go
-  wails.json
-
-  internal/
-    codex/
-      inspect.go
-      paths.go
-    config/
-      config.go
-    peer/
-      client.go
-      normalize.go
-    platform/
-      ips.go
-    security/
-      paths.go
-    share/
-      server.go
-      manifest.go
-      files.go
-    sync/
-      download.go
-      verify.go
-      backup.go
-      apply.go
-
-  frontend/
-    package.json
-    src/
-      App.tsx
-      pages/
-        Share.tsx
-        Sync.tsx
-      components/
-        Notice.tsx
-        ResourceChecklist.tsx
+~/.agentpal/auth-profiles/<profile-id>/
+  profile.json
+  auth.json
+  config-auth.toml
 ```
 
-## Out Of Scope For v1
+切换档案只更新 `auth.json` 和模型/Provider 相关配置，不覆盖 MCP、Projects 或其他本机配置。切换前会备份当前 `auth.json` 和 `config.toml`。
 
-- HTTPS
-- Login or account system
-- Cloud service
-- Automatic peer discovery
-- OpenCode support
-- Single skill selection
-- Config merge
-- Diff UI
-- Rollback UI
-- Two-way sync
-- Remote delete sync
-- Public internet deployment
+中心备份按设备名和档案 ID 存放。上传前请确认网络可信，因为第一版不加密、不登录、不做权限控制。
+
+## Server API
+
+```text
+GET  /health
+GET  /v1/config/manifest
+GET  /v1/config/files/skills/<relative-path>
+GET  /v1/config/mcp/<name>
+
+GET    /v1/auth-backups
+POST   /v1/auth-backups/<device>/<profile>?overwrite=true
+GET    /v1/auth-backups/<device>/<profile>
+DELETE /v1/auth-backups/<device>/<profile>
+```
+
+Server 不在配置清单中发布 `auth.json`。所有路径都会进行安全校验，拒绝绝对路径和路径穿越。
+
+## 本地数据
+
+```text
+~/.agentpal/config.json
+~/.agentpal/auth-profiles/
+~/.agentpal/backups/
+~/.agentpal/server/auth-backups/
+```
+
+## 非目标
+
+- OpenCode 或其他 Agent 工具
+- 公网部署、HTTPS、账号、权限和多租户
+- 认证备份加密
+- Skills/MCP 静默自动应用
+- 中心配置版本历史和回滚界面
+- 点对点 Share/Sync 工作流

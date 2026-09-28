@@ -1,95 +1,38 @@
-export type ResourceStatus = {
-  exists: boolean;
-  path: string;
-  size?: number;
-  count?: number;
-  sensitive?: boolean;
-  rootKeys?: string[];
-  tables?: string[];
-  skills?: string[];
-};
+export type Bootstrap = { mode: 'client' | 'server'; codexDir: string; centralHost: string; centralPort: number; port: number; deviceName: string; backupDir: string; version: string; restartRequired: boolean };
+export type ApplyChange = { kind: string; name: string; action: 'apply' | 'delete' };
+export type ConfigDiffItem = { kind: 'skill' | 'mcp'; name: string; status: 'same' | 'new' | 'changed' | 'local_only'; selected: boolean };
+export type ConfigRefresh = { connected: boolean; error?: string; manifest: unknown; diff: { items: ConfigDiffItem[] } };
+export type ApplyResult = { ok: boolean; backupPath: string; rolledBack: boolean; applied: string[] };
+export type AuthProfile = { id: string; name: string; type: string; provider: string; source: string; active: boolean; model?: string; apiKeyPreview?: string; baseUrl?: string; chatgptUserId?: string; chatgptExpiresAt?: string };
+export type CurrentAuthStatus = { apiKeyPreview?: string; baseUrl?: string; chatgptUserId?: string; chatgptExpiresAt?: string; apiKeyImported: boolean; chatgptImported: boolean; currentProfileId?: string };
+export type ProfileSwitchResult = { ok: boolean; profile: AuthProfile; backupPath: string; providerConflict: boolean; conflictDescription?: string };
+export type ProfileSwitchPreview = { profile: AuthProfile; provider: string; providerConflict: boolean; conflictDescription?: string };
+export type BackupInfo = { device: string; profile: AuthProfile; size: number; updatedAt: string };
+export type UpdateInfo = { currentVersion: string; latestVersion: string; hasUpdate: boolean; releaseUrl: string; assets: Array<{ name: string; url: string; size: number }> };
+export type APIKeyProfileRequest = { name: string; provider: string; baseUrl: string; apiKey: string };
+export type SettingsRequest = { mode: 'client' | 'server'; codexDir: string; centralHost: string; centralPort: number; port: number; deviceName: string; backupDir: string };
 
-export type CodexInspection = {
-  path: string;
-  config: ResourceStatus;
-  auth: ResourceStatus;
-  skills: ResourceStatus;
-};
-
-export type ShareStatus = {
-  running: boolean;
-  port: number;
-  localIPs: string[];
-  url: string;
-};
-
-export type PeerStatus = {
-  ok: boolean;
-  url: string;
-  version: string;
-};
-
-export type ManifestResource = {
-  enabled: boolean;
-  path?: string;
-  sha256?: string;
-  size?: number;
-  sensitive?: boolean;
-  count?: number;
-  files?: Array<{ path: string; sha256: string; size: number }>;
-  rootKeys?: string[];
-  tables?: string[];
-  skills?: string[];
-};
-
-export type RemoteManifest = {
-  schema: number;
-  app: string;
-  version: string;
-  shared: {
-    config: ManifestResource;
-    auth: ManifestResource;
-    skills: ManifestResource;
-  };
-};
-
-export type SyncResult = {
-  ok: boolean;
-  items: string[];
-  backupPath: string;
-};
-
-export type UpdateInfo = {
-  currentVersion: string;
-  latestVersion: string;
-  hasUpdate: boolean;
-  releaseUrl: string;
-  assets: Array<{ name: string; url: string; size: number }>;
-};
-
-type Backend = {
-  App: {
-    GetLocalIPs(): Promise<string[]>;
-    InspectCodexDir(path: string): Promise<CodexInspection>;
-    BrowseFolder(): Promise<string>;
-    GetDefaultCodexDir(): Promise<string>;
-    GetBackupRoot(): Promise<string>;
-    GetBackupExamplePath(): Promise<string>;
-    CheckForUpdate(): Promise<UpdateInfo>;
-    OpenURL(url: string): Promise<void>;
-    StartSharing(req: unknown): Promise<ShareStatus>;
-    StopSharing(): Promise<void>;
-    TestConnection(ip: string): Promise<PeerStatus>;
-    FetchRemoteManifest(ip: string): Promise<RemoteManifest>;
-    SyncFromPeer(req: unknown): Promise<SyncResult>;
-    OpenFolder(path: string): Promise<void>;
-  };
-};
-
-declare global {
-  interface Window {
-    go?: { main?: Backend };
-  }
-}
-
+type Backend = { App: {
+  GetBootstrap(): Promise<Bootstrap>;
+  SaveSettings(request: SettingsRequest): Promise<Bootstrap>;
+  RefreshConfiguration(): Promise<ConfigRefresh>;
+  ApplyConfiguration(request: { changes: ApplyChange[] }): Promise<ApplyResult>;
+  ListAuthProfiles(): Promise<AuthProfile[]>;
+  GetCurrentAuthStatus(): Promise<CurrentAuthStatus>;
+  ImportCurrentAuth(name: string): Promise<AuthProfile>;
+  ImportCurrentAPIKey(name: string): Promise<AuthProfile>;
+  CreateAPIKeyProfile(request: APIKeyProfileRequest): Promise<AuthProfile>;
+  ActivateAuthProfile(id: string): Promise<ProfileSwitchResult>;
+  PreviewAuthProfile(id: string): Promise<ProfileSwitchPreview>;
+  ActivateAuthProfileWithConflict(id: string, allowProviderConflict: boolean): Promise<ProfileSwitchResult>;
+  DeleteAuthProfile(id: string): Promise<void>;
+  ListRemoteBackups(): Promise<BackupInfo[]>;
+  UploadAuthProfile(id: string, overwrite: boolean): Promise<void>;
+  RestoreAuthProfile(device: string, id: string): Promise<AuthProfile>;
+  DeleteRemoteBackup(device: string, id: string): Promise<void>;
+  OpenFolder(path: string): Promise<void>;
+  CheckForUpdate(): Promise<UpdateInfo>;
+  OpenURL(url: string): Promise<void>;
+} };
+declare global { interface Window { go?: { main?: Backend } } }
 export const api = window.go?.main?.App;
