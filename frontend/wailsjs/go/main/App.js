@@ -97,3 +97,27 @@ export function SaveSettings(arg1) {
 export function UploadAuthProfile(arg1, arg2) {
   return window['go']['main']['App']['UploadAuthProfile'](arg1, arg2);
 }
+
+export function StartCentralLogin() {
+  return window['go']['main']['App']['StartCentralLogin']();
+}
+
+export function PollCentralLogin(arg1, arg2) {
+  return window['go']['main']['App']['PollCentralLogin'](arg1, arg2);
+}
+
+export function GetCentralLoginState() {
+  return window['go']['main']['App']['GetCentralLoginState']();
+}
+
+export function LogoutCentralLogin() {
+  return window['go']['main']['App']['LogoutCentralLogin']();
+}
+
+export function SyncCentralAuthProfiles() {
+  return window['go']['main']['App']['SyncCentralAuthProfiles']();
+}
+
+export function ApplyCentralAuthProfile(arg1) {
+  return window['go']['main']['App']['ApplyCentralAuthProfile'](arg1);
+}

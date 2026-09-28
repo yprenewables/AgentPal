@@ -59,6 +59,33 @@ Server 直接读取配置的 Codex 目录。每次清单请求都会重新扫描
 
 中心备份按设备名和档案 ID 存放。上传前请确认网络可信，因为第一版不加密、不登录、不做权限控制。
 
+## 中心登录与预留 profile
+
+Central Host 通过 Casdoor（默认 `https://id.yprenew.com`）做 OAuth 登录，OAuth 回调地址为 `{central_host}:{central_port}/callback`，必须在 Casdoor 应用里登记。
+
+服务端启动参数：
+
+```text
+-casdoor-url         默认 https://id.yprenew.com
+-casdoor-client-id   Casdoor 应用 client ID（必填，否则登录接口返回 503）
+-casdoor-scopes      默认 "openid profile"
+-oauth-redirect-url  Casdoor 中登记的 Redirect URI
+-user-store-dir      默认 ~/.agentpal/server/users
+```
+
+管理员按用户 `sub` 手动放置预留 profile（服务端只读）：
+
+```text
+~/.agentpal/server/users/<sub>/auth-profiles/<name>/
+  profile.json       {"name":"<name>","type":"api_key","provider":"<name>"}
+  auth.json          {"OPENAI_API_KEY":"..."}
+  config-auth.toml   model_provider = "<name>" 且 [model_providers.<name>]
+```
+
+客户端登录后按预留名称同步：本地无同名则新增；一致则标记已同步；不一致只提示，需用户确认后才覆盖本地 profile。同步不会激活 profile，也不会修改 `~/.codex`。
+
+> 安全提示：Central Host 只解析 JWT 的 `sub`，不校验签名。任何能访问 Central Host 的客户端都能伪造 `sub` 读取对应用户的 profile。该能力仅适用于可信内网。
+
 ## Server API
 
 ```text
@@ -71,6 +98,12 @@ GET    /v1/auth-backups
 POST   /v1/auth-backups/<device>/<profile>?overwrite=true
 GET    /v1/auth-backups/<device>/<profile>
 DELETE /v1/auth-backups/<device>/<profile>
+
+POST /v1/auth/login/start
+GET  /v1/auth/login/status/<loginId>?pollToken=<pollToken>
+GET  /callback
+GET  /v1/auth-profiles
+GET  /v1/auth-profiles/<name>
 ```
 
 Server 不在配置清单中发布 `auth.json`。所有路径都会进行安全校验，拒绝绝对路径和路径穿越。
@@ -87,7 +120,7 @@ Server 不在配置清单中发布 `auth.json`。所有路径都会进行安全�
 ## 非目标
 
 - OpenCode 或其他 Agent 工具
-- 公网部署、HTTPS、账号、权限和多租户
+- 公网部署、HTTPS、多租户
 - 认证备份加密
 - Skills/MCP 静默自动应用
 - 中心配置版本历史和回滚界面

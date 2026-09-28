@@ -3,7 +3,7 @@ export type ApplyChange = { kind: string; name: string; action: 'apply' | 'delet
 export type ConfigDiffItem = { kind: 'skill' | 'mcp'; name: string; status: 'same' | 'new' | 'changed' | 'local_only'; selected: boolean };
 export type ConfigRefresh = { connected: boolean; error?: string; manifest: unknown; diff: { items: ConfigDiffItem[] } };
 export type ApplyResult = { ok: boolean; backupPath: string; rolledBack: boolean; applied: string[] };
-export type AuthProfile = { id: string; name: string; type: string; provider: string; source: string; active: boolean; model?: string; apiKeyPreview?: string; baseUrl?: string; chatgptUserId?: string; chatgptExpiresAt?: string };
+export type AuthProfile = { id: string; name: string; type: string; provider: string; source: string; active: boolean; model?: string; apiKeyPreview?: string; baseUrl?: string; chatgptUserId?: string; chatgptExpiresAt?: string; reservedName?: string; contentHash?: string };
 export type CurrentAuthStatus = { apiKeyPreview?: string; baseUrl?: string; chatgptUserId?: string; chatgptExpiresAt?: string; apiKeyImported: boolean; chatgptImported: boolean; currentProfileId?: string };
 export type ProfileSwitchResult = { ok: boolean; profile: AuthProfile; backupPath: string; providerConflict: boolean; conflictDescription?: string };
 export type ProfileSwitchPreview = { profile: AuthProfile; provider: string; providerConflict: boolean; conflictDescription?: string };
@@ -11,6 +11,11 @@ export type BackupInfo = { device: string; profile: AuthProfile; size: number; u
 export type UpdateInfo = { currentVersion: string; latestVersion: string; hasUpdate: boolean; releaseUrl: string; assets: Array<{ name: string; url: string; size: number }> };
 export type APIKeyProfileRequest = { name: string; provider: string; baseUrl: string; apiKey: string };
 export type SettingsRequest = { mode: 'client' | 'server'; codexDir: string; centralHost: string; centralPort: number; port: number; deviceName: string; backupDir: string };
+export type LoginStart = { loginId: string; pollToken: string; authorizeUrl: string; expiresAt: string };
+export type LoginStatus = { status: 'pending' | 'approved' | 'failed'; subject?: string; accessToken?: string; expiresIn?: number; error?: string };
+export type CentralLoginState = { loggedIn: boolean; subject?: string; expiresAt?: string };
+export type AuthSyncItem = { name: string; status: 'added' | 'synced' | 'needs_sync' | 'error'; detail?: string };
+export type AuthSyncReport = { items: AuthSyncItem[] };
 
 type Backend = { App: {
   GetBootstrap(): Promise<Bootstrap>;
@@ -33,6 +38,12 @@ type Backend = { App: {
   OpenFolder(path: string): Promise<void>;
   CheckForUpdate(): Promise<UpdateInfo>;
   OpenURL(url: string): Promise<void>;
+  StartCentralLogin(): Promise<LoginStart>;
+  PollCentralLogin(loginId: string, pollToken: string): Promise<LoginStatus>;
+  GetCentralLoginState(): Promise<CentralLoginState>;
+  LogoutCentralLogin(): Promise<void>;
+  SyncCentralAuthProfiles(): Promise<AuthSyncReport>;
+  ApplyCentralAuthProfile(name: string): Promise<AuthProfile>;
 } };
 declare global { interface Window { go?: { main?: Backend } } }
 export const api = window.go?.main?.App;

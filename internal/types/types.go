@@ -25,12 +25,17 @@ type SettingsRequest struct {
 }
 
 type ServerOptions struct {
-	CodexDir       string `json:"codexDir"`
-	Port           int    `json:"port"`
-	AdminJWTIssuer string `json:"adminJWTIssuer,omitempty"`
-	AdminJWTPublic string `json:"adminJWTPublic,omitempty"`
-	PortalLoginURL string `json:"portalLoginURL,omitempty"`
-	AllowTestAuth  bool   `json:"allowTestAuth,omitempty"`
+	CodexDir         string `json:"codexDir"`
+	Port             int    `json:"port"`
+	AdminJWTIssuer   string `json:"adminJWTIssuer,omitempty"`
+	AdminJWTPublic   string `json:"adminJWTPublic,omitempty"`
+	PortalLoginURL   string `json:"portalLoginURL,omitempty"`
+	AllowTestAuth    bool   `json:"allowTestAuth,omitempty"`
+	CasdoorURL       string `json:"casdoorURL,omitempty"`
+	CasdoorClientID  string `json:"casdoorClientID,omitempty"`
+	CasdoorScopes    string `json:"casdoorScopes,omitempty"`
+	OAuthRedirectURL string `json:"oauthRedirectURL,omitempty"`
+	UserStoreDir     string `json:"userStoreDir,omitempty"`
 }
 
 type AdminStatus struct {
@@ -140,6 +145,8 @@ type AuthProfile struct {
 	ChatGPTUserID    string `json:"chatgptUserId,omitempty"`
 	ChatGPTExpiresAt string `json:"chatgptExpiresAt,omitempty"`
 	CurrentProfileID string `json:"currentProfileId,omitempty"`
+	ReservedName     string `json:"reservedName,omitempty"`
+	ContentHash      string `json:"contentHash,omitempty"`
 }
 type CurrentAuthStatus struct {
 	APIKeyPreview    string `json:"apiKeyPreview,omitempty"`
@@ -205,4 +212,53 @@ type UpdateInfo struct {
 	HasUpdate      bool          `json:"hasUpdate"`
 	ReleaseURL     string        `json:"releaseUrl"`
 	Assets         []UpdateAsset `json:"assets"`
+}
+
+type RemoteAuthProfile struct {
+	Name        string    `json:"name"`
+	Provider    string    `json:"provider"`
+	Type        string    `json:"type"`
+	ContentHash string    `json:"contentHash"`
+	UpdatedAt   time.Time `json:"updatedAt"`
+}
+
+type RemoteAuthProfileDetail struct {
+	Name           string         `json:"name"`
+	Provider       string         `json:"provider"`
+	Type           string         `json:"type"`
+	ContentHash    string         `json:"contentHash"`
+	UpdatedAt      time.Time      `json:"updatedAt"`
+	Auth           map[string]any `json:"auth"`
+	ConfigAuthToml string         `json:"configAuthToml"`
+}
+
+type LoginStart struct {
+	LoginID      string    `json:"loginId"`
+	PollToken    string    `json:"pollToken"`
+	AuthorizeURL string    `json:"authorizeUrl"`
+	ExpiresAt    time.Time `json:"expiresAt"`
+}
+
+type LoginStatus struct {
+	Status      string `json:"status"`
+	Subject     string `json:"subject,omitempty"`
+	AccessToken string `json:"accessToken,omitempty"`
+	ExpiresIn   int    `json:"expiresIn,omitempty"`
+	Error       string `json:"error,omitempty"`
+}
+
+type CentralLoginState struct {
+	LoggedIn  bool      `json:"loggedIn"`
+	Subject   string    `json:"subject,omitempty"`
+	ExpiresAt time.Time `json:"expiresAt,omitempty"`
+}
+
+type AuthSyncItem struct {
+	Name   string `json:"name"`
+	Status string `json:"status"`
+	Detail string `json:"detail,omitempty"`
+}
+
+type AuthSyncReport struct {
+	Items []AuthSyncItem `json:"items"`
 }

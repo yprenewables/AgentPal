@@ -21,11 +21,14 @@ import (
 )
 
 type Server struct {
-	options    types.ServerOptions
-	httpServer *http.Server
-	BackupDir  string
-	adminAuth  *PortalJWTVerifier
-	devices    *deviceAuthorizations
+	options      types.ServerOptions
+	httpServer   *http.Server
+	BackupDir    string
+	adminAuth    *PortalJWTVerifier
+	devices      *deviceAuthorizations
+	logins       *pendingLogins
+	userProfiles *userProfileStore
+	oauthClient  *http.Client
 }
 
 func NewServer(options types.ServerOptions) *Server {
@@ -33,6 +36,13 @@ func NewServer(options types.ServerOptions) *Server {
 		options.Port = constants.DefaultPort
 	}
 	s := &Server{options: options, devices: newDeviceAuthorizations()}
+	s.logins = newPendingLogins()
+	userStore := options.UserStoreDir
+	if strings.TrimSpace(userStore) == "" {
+		userStore = filepath.Join(os.TempDir(), "agentpal-user-profiles")
+	}
+	s.userProfiles = newUserProfileStore(userStore)
+	s.oauthClient = &http.Client{Timeout: 15 * time.Second}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", s.health)
 	mux.HandleFunc("/v1/config/manifest", s.manifest)
@@ -47,6 +57,11 @@ func NewServer(options types.ServerOptions) *Server {
 	mux.HandleFunc("/agentpal", s.adminPage)
 	mux.HandleFunc("/agentpal/", s.adminPage)
 	mux.HandleFunc("/agentpal/authorize", s.authorizePage)
+	mux.HandleFunc("/v1/auth/login/start", s.oauthStart)
+	mux.HandleFunc("/v1/auth/login/status/", s.oauthStatus)
+	mux.HandleFunc("/callback", s.oauthCallback)
+	mux.HandleFunc("/v1/auth-profiles", s.authProfiles)
+	mux.HandleFunc("/v1/auth-profiles/", s.authProfiles)
 	if options.AdminJWTPublic != "" {
 		if verifier, err := NewPortalJWTVerifierFromFile(options.AdminJWTPublic, options.AdminJWTIssuer); err == nil {
 			s.adminAuth = verifier

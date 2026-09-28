@@ -49,3 +49,15 @@ export function RestoreAuthProfile(arg1:string,arg2:string):Promise<types.AuthPr
 export function SaveSettings(arg1:types.SettingsRequest):Promise<types.Bootstrap>;
 
 export function UploadAuthProfile(arg1:string,arg2:boolean):Promise<void>;
+
+export function StartCentralLogin():Promise<types.LoginStart>;
+
+export function PollCentralLogin(arg1:string,arg2:string):Promise<types.LoginStatus>;
+
+export function GetCentralLoginState():Promise<types.CentralLoginState>;
+
+export function LogoutCentralLogin():Promise<void>;
+
+export function SyncCentralAuthProfiles():Promise<types.AuthSyncReport>;
+
+export function ApplyCentralAuthProfile(arg1:string):Promise<types.AuthProfile>;

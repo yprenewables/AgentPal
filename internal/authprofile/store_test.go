@@ -146,3 +146,27 @@ func TestStoreDeleteIgnoresStaleActiveMarkerWhenCurrentProfileDiffers(t *testing
 		t.Fatalf("stale active marker still exists: %v", err)
 	}
 }
+
+func TestSavedProfileCarriesContentHashAndReservedName(t *testing.T) {
+	store := NewStore(t.TempDir())
+	profile, err := store.CreateAPIKey(APIKeyRequest{Name: "yangpu", Provider: "yangpu", BaseURL: "https://example/v1", APIKey: "sk-test"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if profile.ContentHash == "" {
+		t.Fatal("created profile has no content hash")
+	}
+	if profile.ReservedName != "" {
+		t.Fatalf("locally created profile must not have reservedName: %#v", profile)
+	}
+	profiles, err := store.List()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(profiles) != 1 || profiles[0].ContentHash == "" {
+		t.Fatalf("listed profile missing content hash: %#v", profiles)
+	}
+	if profiles[0].ContentHash != profile.ContentHash {
+		t.Fatalf("hash mismatch: %q vs %q", profiles[0].ContentHash, profile.ContentHash)
+	}
+}

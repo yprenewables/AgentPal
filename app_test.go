@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"agentpal/internal/authprofile"
+	"agentpal/internal/types"
 )
 
 func TestDisconnectedRefreshHasEmptyItems(t *testing.T) {
@@ -39,5 +40,30 @@ func TestProfileListDoesNotOverwriteSavedProfilesWithCurrentAuth(t *testing.T) {
 	}
 	if got[1].Active || got[1].Provider != "saved-other" || got[1].APIKeyPreview != "sk-••••bbbb" || got[1].BaseURL != "https://other.example/v1" {
 		t.Fatalf("other profile was overwritten by current auth: %#v", got[1])
+	}
+}
+
+func TestFindLocalByReservedName(t *testing.T) {
+	profiles := []authprofile.AuthProfile{
+		{ID: "a", Name: "Work", Provider: "openai"},
+		{ID: "b", Name: "yangpu", ReservedName: "yangpu"},
+	}
+	found, ok := findLocalReserved(profiles, "yangpu")
+	if !ok || found.ID != "b" {
+		t.Fatalf("found=%#v ok=%v", found, ok)
+	}
+	if _, ok := findLocalReserved(profiles, "missing"); ok {
+		t.Fatal("unexpected match")
+	}
+	if _, ok := findLocalReserved(profiles, "openai"); ok {
+		t.Fatal("must not match by provider")
+	}
+}
+
+func TestCentralProfileFromDetail(t *testing.T) {
+	detail := types.RemoteAuthProfileDetail{Name: "yangpu", Provider: "yangpu", Type: "api_key", Auth: map[string]any{"OPENAI_API_KEY": "sk-1"}, ConfigAuthToml: "model_provider = \"yangpu\"\n"}
+	profile := centralProfileFrom(detail)
+	if profile.Name != "yangpu" || profile.Provider != "yangpu" || string(profile.AuthJSON) == "" || string(profile.ConfigTOML) == "" {
+		t.Fatalf("profile=%#v", profile)
 	}
 }

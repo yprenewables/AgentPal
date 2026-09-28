@@ -75,6 +75,75 @@ function AuthenticationTabCompact({ profiles, reload, setNotice }: { profiles: A
   const [baseUrl, setBaseUrl] = useState('https://api.openai.com/v1');
   const [key, setKey] = useState('');
   const [confirmAction, setConfirmAction] = useState<{ kind: 'switch' | 'delete'; profile?: AuthProfile; description?: string } | null>(null);
+  const [login, setLogin] = useState<{ loggedIn: boolean; subject?: string }>({ loggedIn: false });
+  const [syncItems, setSyncItems] = useState<{ name: string; status: string; detail?: string }[]>([]);
+  const [loginBusy, setLoginBusy] = useState(false);
+
+  useEffect(() => { void api?.GetCentralLoginState().then((state) => setLogin({ loggedIn: state.loggedIn, subject: state.subject })).catch(() => setLogin({ loggedIn: false })); }, []);
+
+  async function runSync() {
+    if (!api) return;
+    try {
+      const report = await api.SyncCentralAuthProfiles();
+      setSyncItems(report.items);
+      await reload();
+      setNotice({ kind: 'success', text: `Central profiles checked: ${report.items.length}.` });
+    } catch (error) {
+      setNotice({ kind: 'error', text: String(error) });
+    }
+  }
+
+  async function startLogin() {
+    if (!api || loginBusy) return;
+    setLoginBusy(true);
+    try {
+      const start = await api.StartCentralLogin();
+      const deadline = new Date(start.expiresAt).getTime();
+      while (Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+        let status;
+        try {
+          status = await api.PollCentralLogin(start.loginId, start.pollToken);
+        } catch {
+          break;
+        }
+        if (status.status === 'approved') {
+          setLogin({ loggedIn: true, subject: status.subject });
+          setNotice({ kind: 'success', text: 'Logged in with Casdoor.' });
+          await runSync();
+          return;
+        }
+        if (status.status === 'failed') {
+          setNotice({ kind: 'error', text: status.error || 'Central login failed.' });
+          return;
+        }
+      }
+      setNotice({ kind: 'warning', text: 'Central login was not completed.' });
+    } catch (error) {
+      setNotice({ kind: 'error', text: String(error) });
+    } finally {
+      setLoginBusy(false);
+    }
+  }
+
+  async function logout() {
+    if (!api) return;
+    await api.LogoutCentralLogin();
+    setLogin({ loggedIn: false });
+    setSyncItems([]);
+  }
+
+  async function overwrite(name: string) {
+    if (!api) return;
+    try {
+      await api.ApplyCentralAuthProfile(name);
+      await reload();
+      await runSync();
+      setNotice({ kind: 'success', text: `Overwrote local profile ${name} from central.` });
+    } catch (error) {
+      setNotice({ kind: 'error', text: String(error) });
+    }
+  }
 
   useEffect(() => { void api?.GetCurrentAuthStatus().then(setCurrent).catch(() => setCurrent(null)); }, [profiles]);
 
@@ -141,6 +210,20 @@ function AuthenticationTabCompact({ profiles, reload, setNotice }: { profiles: A
       <div><h1>Authentication</h1><p>Choose one local API Key or ChatGPT profile.</p></div>
       <button className="primary" onClick={() => setShowKey(true)}>New API Key</button>
     </div>
+    <div className="current-auth">
+      <div className="current-auth-line">
+        {login.loggedIn
+          ? <><strong>Casdoor: {login.subject}</strong><button className="secondary" onClick={() => void runSync()}>Sync central profiles</button><button className="secondary" onClick={() => void logout()}>Logout</button></>
+          : <><strong>Central login</strong><button className="primary" onClick={() => void startLogin()} disabled={loginBusy}>{loginBusy ? 'Waiting for login...' : 'Login with Casdoor'}</button></>}
+      </div>
+    </div>
+    {syncItems.length > 0 && <div className="profile-list">{syncItems.map((item) => <article className="profile-row" key={item.name}>
+      <div className="profile-main"><strong>{item.name}</strong><small>{item.status}{item.detail ? ` · ${item.detail}` : ''}</small></div>
+      <div className="profile-actions">
+        {item.status === 'needs_sync' && <button className="primary" onClick={() => void overwrite(item.name)}>Overwrite local</button>}
+        {item.status === 'needs_sync' && <button className="secondary" onClick={() => setSyncItems(syncItems.filter((entry) => entry.name !== item.name))}>Keep local</button>}
+      </div>
+    </article>)}</div>}
     {!hasCurrentProfile && current?.apiKeyPreview && <div className="current-auth"><div className="current-auth-line"><strong>API KEY: {current.apiKeyPreview}</strong><span>{current.baseUrl || 'base_url not detected'}</span><button className="secondary" onClick={() => void importCurrentAPIKey()}>Import</button></div></div>}
     {!hasCurrentProfile && !current?.apiKeyPreview && current?.chatgptUserId && <div className="current-auth"><div className="current-auth-line"><strong>ChatGPT User ID: {current.chatgptUserId}</strong><span>expire at: {current.chatgptExpiresAt || 'unknown'}</span><button className="secondary" onClick={() => void importCurrentChatGPT()}>Import</button></div></div>}
     <div className="profile-list">

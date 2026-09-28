@@ -19,6 +19,8 @@ type AuthProfile struct {
 	Type             string    `json:"type"`
 	Provider         string    `json:"provider"`
 	Source           string    `json:"source"`
+	ReservedName     string    `json:"reservedName,omitempty"`
+	ContentHash      string    `json:"contentHash,omitempty"`
 	CreatedAt        time.Time `json:"createdAt"`
 	UpdatedAt        time.Time `json:"updatedAt"`
 	Active           bool      `json:"active"`
@@ -108,6 +110,9 @@ func readSavedProfile(dir string) (AuthProfile, error) {
 	if profile.Type == "api_key" && profile.APIKeyPreview == "" {
 		return AuthProfile{}, errors.New("API key profile has no saved API key")
 	}
+	if hash, err := ComputeContentHash(authData, configData); err == nil {
+		profile.ContentHash = hash
+	}
 	return profile, nil
 }
 
@@ -134,7 +139,7 @@ func (s *Store) CreateAPIKey(req APIKeyRequest) (AuthProfile, error) {
 	if err := writeProfile(dir, p, auth, config); err != nil {
 		return p, err
 	}
-	return p, nil
+	return readSavedProfile(dir)
 }
 
 func (s *Store) Delete(profileID string, currentProfileID ...string) error {
@@ -166,6 +171,9 @@ func (s *Store) Delete(profileID string, currentProfileID ...string) error {
 }
 
 func writeProfile(dir string, p AuthProfile, auth, config []byte) error {
+	if hash, err := ComputeContentHash(auth, config); err == nil {
+		p.ContentHash = hash
+	}
 	meta, _ := json.MarshalIndent(p, "", "  ")
 	meta = append(meta, '\n')
 	for name, data := range map[string][]byte{"profile.json": meta, "auth.json": auth, "config-auth.toml": config} {

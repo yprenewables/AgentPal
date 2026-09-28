@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"os/exec"
@@ -18,6 +19,7 @@ import (
 	"agentpal/internal/codex"
 	appconfig "agentpal/internal/config"
 	"agentpal/internal/constants"
+	"agentpal/internal/login"
 	"agentpal/internal/types"
 	"agentpal/internal/update"
 )
@@ -155,7 +157,7 @@ func (a *App) ApplyConfiguration(req types.ApplyRequest) (types.ApplyResult, err
 }
 
 func profileType(p authprofile.AuthProfile) types.AuthProfile {
-	return types.AuthProfile{ID: p.ID, Name: p.Name, Type: p.Type, Provider: p.Provider, Source: p.Source, Active: p.Active, APIKeyPreview: p.APIKeyPreview, BaseURL: p.BaseURL, ChatGPTUserID: p.ChatGPTUserID, ChatGPTExpiresAt: p.ChatGPTExpiresAt}
+	return types.AuthProfile{ID: p.ID, Name: p.Name, Type: p.Type, Provider: p.Provider, Source: p.Source, Active: p.Active, APIKeyPreview: p.APIKeyPreview, BaseURL: p.BaseURL, ChatGPTUserID: p.ChatGPTUserID, ChatGPTExpiresAt: p.ChatGPTExpiresAt, ReservedName: p.ReservedName, ContentHash: p.ContentHash}
 }
 
 func profileTypesFromStore(profiles []authprofile.AuthProfile, current authprofile.CurrentStatus) []types.AuthProfile {
@@ -451,4 +453,186 @@ func openURLFallback(url string) error {
 	default:
 		return exec.Command("xdg-open", url).Start()
 	}
+}
+
+func findLocalReserved(profiles []authprofile.AuthProfile, name string) (authprofile.AuthProfile, bool) {
+	for _, profile := range profiles {
+		if profile.ReservedName == name {
+			return profile, true
+		}
+	}
+	return authprofile.AuthProfile{}, false
+}
+
+func centralProfileFrom(detail types.RemoteAuthProfileDetail) authprofile.CentralProfile {
+	authJSON, _ := json.Marshal(detail.Auth)
+	return authprofile.CentralProfile{
+		Name: detail.Name, Provider: detail.Provider, Type: detail.Type,
+		AuthJSON: authJSON, ConfigTOML: []byte(detail.ConfigAuthToml),
+	}
+}
+
+func (a *App) StartCentralLogin() (types.LoginStart, error) {
+	state, err := appconfig.ReadState()
+	if err != nil {
+		return types.LoginStart{}, err
+	}
+	result, err := central.NewClient(nil, 15*time.Second).StartLogin(centerBase(state))
+	if err != nil {
+		return types.LoginStart{}, err
+	}
+	if a.ctx != nil {
+		wailsruntime.BrowserOpenURL(a.ctx, result.AuthorizeURL)
+	}
+	return result, nil
+}
+
+func (a *App) PollCentralLogin(loginID, pollToken string) (types.LoginStatus, error) {
+	state, err := appconfig.ReadState()
+	if err != nil {
+		return types.LoginStatus{}, err
+	}
+	status, err := central.NewClient(nil, 15*time.Second).LoginStatus(centerBase(state), loginID, pollToken)
+	if err != nil {
+		return types.LoginStatus{}, err
+	}
+	if status.Status == "approved" {
+		root, err := appconfig.StateDir()
+		if err != nil {
+			return types.LoginStatus{}, err
+		}
+		expires := time.Now().Add(24 * time.Hour)
+		if status.ExpiresIn > 0 {
+			expires = time.Now().Add(time.Duration(status.ExpiresIn) * time.Second)
+		}
+		if err := login.Write(root, login.State{Subject: status.Subject, AccessToken: status.AccessToken, ExpiresAt: expires}); err != nil {
+			return types.LoginStatus{}, err
+		}
+	}
+	return status, nil
+}
+
+func (a *App) GetCentralLoginState() (types.CentralLoginState, error) {
+	root, err := appconfig.StateDir()
+	if err != nil {
+		return types.CentralLoginState{}, err
+	}
+	state, err := login.Read(root)
+	if err != nil {
+		return types.CentralLoginState{}, err
+	}
+	if state.AccessToken == "" || time.Now().After(state.ExpiresAt) {
+		return types.CentralLoginState{LoggedIn: false}, nil
+	}
+	return types.CentralLoginState{LoggedIn: true, Subject: state.Subject, ExpiresAt: state.ExpiresAt}, nil
+}
+
+func (a *App) LogoutCentralLogin() error {
+	root, err := appconfig.StateDir()
+	if err != nil {
+		return err
+	}
+	return login.Clear(root)
+}
+
+func (a *App) SyncCentralAuthProfiles() (types.AuthSyncReport, error) {
+	state, err := appconfig.ReadState()
+	if err != nil {
+		return types.AuthSyncReport{}, err
+	}
+	root, err := appconfig.StateDir()
+	if err != nil {
+		return types.AuthSyncReport{}, err
+	}
+	session, err := login.Read(root)
+	if err != nil {
+		return types.AuthSyncReport{}, err
+	}
+	if session.AccessToken == "" || time.Now().After(session.ExpiresAt) {
+		return types.AuthSyncReport{}, errors.New("not logged in")
+	}
+	client := central.NewClient(nil, 15*time.Second)
+	base := centerBase(state)
+	remote, err := client.CentralAuthProfiles(base, session.AccessToken)
+	if err != nil {
+		return types.AuthSyncReport{}, err
+	}
+	profilesRoot, err := codex.ExpandPath("~/.agentpal/auth-profiles")
+	if err != nil {
+		return types.AuthSyncReport{}, err
+	}
+	store := authprofile.NewStore(profilesRoot)
+	local, err := store.List()
+	if err != nil {
+		return types.AuthSyncReport{}, err
+	}
+	report := types.AuthSyncReport{Items: []types.AuthSyncItem{}}
+	for _, item := range remote {
+		existing, found := findLocalReserved(local, item.Name)
+		if !found {
+			detail, err := client.CentralAuthProfile(base, session.AccessToken, item.Name)
+			if err != nil {
+				report.Items = append(report.Items, types.AuthSyncItem{Name: item.Name, Status: "error", Detail: err.Error()})
+				continue
+			}
+			if _, err := store.AddCentral(centralProfileFrom(detail)); err != nil {
+				report.Items = append(report.Items, types.AuthSyncItem{Name: item.Name, Status: "error", Detail: err.Error()})
+				continue
+			}
+			report.Items = append(report.Items, types.AuthSyncItem{Name: item.Name, Status: "added"})
+			continue
+		}
+		localHash := existing.ContentHash
+		if localHash == "" {
+			if computed, err := store.ContentHashFor(existing.ID); err == nil {
+				localHash = computed
+			}
+		}
+		if localHash != "" && localHash == item.ContentHash {
+			report.Items = append(report.Items, types.AuthSyncItem{Name: item.Name, Status: "synced"})
+			continue
+		}
+		report.Items = append(report.Items, types.AuthSyncItem{Name: item.Name, Status: "needs_sync"})
+	}
+	return report, nil
+}
+
+func (a *App) ApplyCentralAuthProfile(name string) (types.AuthProfile, error) {
+	state, err := appconfig.ReadState()
+	if err != nil {
+		return types.AuthProfile{}, err
+	}
+	root, err := appconfig.StateDir()
+	if err != nil {
+		return types.AuthProfile{}, err
+	}
+	session, err := login.Read(root)
+	if err != nil {
+		return types.AuthProfile{}, err
+	}
+	if session.AccessToken == "" || time.Now().After(session.ExpiresAt) {
+		return types.AuthProfile{}, errors.New("not logged in")
+	}
+	profilesRoot, err := codex.ExpandPath("~/.agentpal/auth-profiles")
+	if err != nil {
+		return types.AuthProfile{}, err
+	}
+	store := authprofile.NewStore(profilesRoot)
+	local, err := store.List()
+	if err != nil {
+		return types.AuthProfile{}, err
+	}
+	existing, found := findLocalReserved(local, name)
+	if !found {
+		return types.AuthProfile{}, errors.New("no local profile for reserved name: " + name)
+	}
+	detail, err := central.NewClient(nil, 15*time.Second).CentralAuthProfile(centerBase(state), session.AccessToken, name)
+	if err != nil {
+		return types.AuthProfile{}, err
+	}
+	updated, err := store.OverwriteCentral(existing.ID, centralProfileFrom(detail))
+	if err != nil {
+		return types.AuthProfile{}, err
+	}
+	return profileType(updated), nil
 }
