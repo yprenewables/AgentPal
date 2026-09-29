@@ -32,6 +32,7 @@ type Server struct {
 	devices      *deviceAuthorizations
 	logins       *pendingLogins
 	userProfiles *userProfileStore
+	settings     *settingsStore
 	oauthClient  *http.Client
 }
 
@@ -46,6 +47,7 @@ func NewServer(options types.ServerOptions) *Server {
 		userStore = filepath.Join(os.TempDir(), "agentpal-user-profiles")
 	}
 	s.userProfiles = newUserProfileStore(userStore)
+	s.settings = newSettingsStore(userStore)
 	s.oauthClient = &http.Client{Timeout: 15 * time.Second}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", s.health)
@@ -58,6 +60,7 @@ func NewServer(options types.ServerOptions) *Server {
 	mux.HandleFunc("/agentpal/v1/admin/status", s.adminStatus)
 	mux.HandleFunc("/v1/admin/users", s.adminUsers)
 	mux.HandleFunc("/v1/admin/me", s.adminMe)
+	mux.HandleFunc("/v1/admin/settings", s.adminSettings)
 	mux.HandleFunc("/v1/admin/user-profiles", s.adminProfiles)
 	mux.HandleFunc("/v1/admin/user-profiles/", s.adminProfiles)
 	mux.HandleFunc("/v1/client/device/start", s.deviceStart)

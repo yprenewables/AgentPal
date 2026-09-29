@@ -224,6 +224,14 @@ type RemoteAuthProfile struct {
 	UpdatedAt   time.Time `json:"updatedAt"`
 }
 
+// ReservedSettings 是中心侧统一生成预留 profile 所用的参数。
+type ReservedSettings struct {
+	Provider string `json:"provider"`
+	BaseURL  string `json:"baseURL"`
+	WireAPI  string `json:"wireAPI"`
+	EnvKey   string `json:"envKey"`
+}
+
 type RemoteAuthProfileDetail struct {
 	Name           string         `json:"name"`
 	Provider       string         `json:"provider"`

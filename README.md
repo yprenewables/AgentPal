@@ -77,6 +77,19 @@ Central Host 通过 Casdoor（默认 `https://id.yprenew.com`）做 OAuth 登录
 
 管理员可以用管理页 `/agentpal`（点击登录跳转 Casdoor）维护用户预留 profile，也可以直接放目录（格式如下）：
 
+管理页的「系统配置」页统一设置 provider 名称、base_url、wire_api、env_key，用于生成所有用户的预留 profile；「用户」页只需选择用户并录入 API Key（类型固定 `api_key`），保存即按系统配置生成/覆盖该用户的预留 profile，也可留空为未配置的默认值：
+
+```json
+{
+  "provider": "memory",
+  "baseURL": "https://memory.yprenewables.com/codex/default",
+  "wireAPI": "responses",
+  "envKey": "OPENAI_API_KEY"
+}
+```
+
+生成的目录格式：
+
 ```text
 ~/.agentpal/server/users/<sub>/auth-profiles/<name>/
   profile.json       {"name":"<name>","type":"api_key","provider":"<name>"}
@@ -109,7 +122,10 @@ GET  /v1/auth-profiles/<name>
 
 GET    /v1/admin/users
 GET    /v1/admin/me
+GET    /v1/admin/settings
+PUT    /v1/admin/settings
 GET    /v1/admin/user-profiles/<sub>
+POST   /v1/admin/user-profiles/<sub>
 GET    /v1/admin/user-profiles/<sub>/<name>
 POST   /v1/admin/user-profiles/<sub>/<name>
 DELETE /v1/admin/user-profiles/<sub>/<name>

@@ -278,11 +278,18 @@ func ParseJWTSubject(token string) (string, error)
 ```text
 GET    /v1/admin/users
 GET    /v1/admin/me
+GET    /v1/admin/settings
+PUT    /v1/admin/settings
 GET    /v1/admin/user-profiles/<sub>
+POST   /v1/admin/user-profiles/<sub>
 GET    /v1/admin/user-profiles/<sub>/<name>
 POST   /v1/admin/user-profiles/<sub>/<name>
 DELETE /v1/admin/user-profiles/<sub>/<name>
 ```
+
+系统配置（`/v1/admin/settings`）统一保存生成预留 profile 所用的参数：`provider`、`baseURL`、`wireAPI`、`envKey`，默认 `memory` / `https://memory.yprenewables.com/codex/default` / `responses` / `OPENAI_API_KEY`。持久化在 `<user-store-dir>/settings.json`（`0600`）；`provider` 仅允许 `[A-Za-z0-9_-]`，`baseURL` 必须是绝对 http(s) URL，`envKey` 必须是合法环境变量名；空字段回落到默认值。
+
+`POST /v1/admin/user-profiles/<sub>`（不带 name）是简化入口：请求体只需 `{ "apiKey": "..." }`，服务端按系统配置生成 `profile.json`（name=provider、type=`api_key`）、`auth.json`（`{ envKey: apiKey }`）与 `config-auth.toml`（`model_provider`、`[model_providers.<provider>]`、`base_url`、`env_key`、`wire_api`，`sk-mem-` 前缀的 key 追加 `experimental_bearer_token`），并覆盖该用户的预留 profile。带 name 的 `POST` 保留为高级手动入口。
 
 - `GET /v1/admin/me` 返回当前管理员的 `subject`，用于管理页判断登录状态。
 - `GET /v1/admin/users` 只列出仍有至少一个合法预留 profile 的 `sub`。
@@ -291,7 +298,7 @@ DELETE /v1/admin/user-profiles/<sub>/<name>
 - `POST` 请求体：`{ "type", "provider", "auth": {...}, "configAuthToml": "..." }`，创建或覆盖。
 - 校验：`sub` 走 `validateSubject`（拒绝 `/`、`\`、`:`、`..`）；`name` 走 `ValidateReservedName`；`auth` 必须是 JSON 对象；`configAuthToml` 必须能解析且 `model_provider == name`。
 - 写入先落到临时目录再原子替换目标目录，目录 `0700`、文件 `0600`。
-- 管理页 `/agentpal` 用静态 HTML（`internal/central/admin_page.html`，`go:embed` 嵌入）实现：未登录显示登录卡片（点击跳转 Casdoor），登录后显示「概览 / 用户」两个标签；用户标签为左侧用户列表 + 右侧该用户的预留 profile 列表与新增/覆盖/编辑/删除表单；页面明确提示 `auth.json` 为明文凭据。
+- 管理页 `/agentpal` 用静态 HTML（`internal/central/admin_page.html`，`go:embed` 嵌入）实现：未登录显示登录卡片（点击跳转 Casdoor），登录后显示「概览 / 用户 / 系统配置」三个标签；用户标签为左侧用户列表 + 右侧该用户的预留 profile 列表与「录入 API Key」表单（类型固定 `api_key`，其余由系统配置预填），系统配置标签设置统一 provider 参数；页面明确提示 `auth.json` 为明文凭据。
 - 登录回跳通过 `/v1/auth/login/start` 的可选 `returnTo` 实现，仅接受同源绝对路径（`sanitizeReturnTo`），避免开放重定向。
 
 ### 5.8 内容哈希

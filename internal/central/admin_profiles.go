@@ -4,9 +4,11 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"agentpal/internal/authprofile"
+	"agentpal/internal/types"
 
 	"github.com/pelletier/go-toml/v2"
 )
@@ -149,16 +151,19 @@ func (s *Server) adminProfiles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if len(parts) == 1 {
-		if r.Method != http.MethodGet {
+		switch r.Method {
+		case http.MethodGet:
+			items, err := s.userProfiles.list(sub)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			writeJSON(w, items)
+		case http.MethodPost:
+			s.adminApplyReserved(w, r, sub)
+		default:
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-			return
 		}
-		items, err := s.userProfiles.list(sub)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		writeJSON(w, items)
 		return
 	}
 	name := parts[1]
@@ -231,4 +236,98 @@ func (s *Server) adminProfileSave(w http.ResponseWriter, r *http.Request, sub, n
 		return
 	}
 	writeJSON(w, profileDetail(profile))
+}
+
+func buildReservedProfile(settings types.ReservedSettings, apiKey string) authprofile.CentralProfile {
+	quote := strconv.Quote
+	config := "model_provider = " + quote(settings.Provider) + "\n\n" +
+		"[model_providers." + settings.Provider + "]\n" +
+		"name = " + quote(settings.Provider) + "\n" +
+		"base_url = " + quote(settings.BaseURL) + "\n" +
+		"env_key = " + quote(settings.EnvKey) + "\n" +
+		"wire_api = " + quote(settings.WireAPI) + "\n"
+	if strings.HasPrefix(apiKey, "sk-mem-") {
+		config += "experimental_bearer_token = " + quote(apiKey) + "\n"
+	}
+	authJSON, _ := json.Marshal(map[string]string{settings.EnvKey: apiKey})
+	return authprofile.CentralProfile{
+		Name: settings.Provider, Provider: settings.Provider, Type: "api_key",
+		AuthJSON: authJSON, ConfigTOML: []byte(config),
+	}
+}
+
+// adminApplyReserved 用系统配置里的统一参数为用户生成预留 profile，管理员只需提供 api_key。
+func (s *Server) adminApplyReserved(w http.ResponseWriter, r *http.Request, sub string) {
+	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
+	if err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	var request struct {
+		APIKey string `json:"apiKey"`
+	}
+	if err := json.Unmarshal(body, &request); err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	request.APIKey = strings.TrimSpace(request.APIKey)
+	if request.APIKey == "" {
+		http.Error(w, "apiKey is required", http.StatusBadRequest)
+		return
+	}
+	settings, err := s.settings.get()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	profile := buildReservedProfile(settings, request.APIKey)
+	meta := reservedMeta{Name: profile.Name, Type: profile.Type, Provider: profile.Provider}
+	if err := s.userProfiles.write(sub, profile.Name, meta, profile.AuthJSON, profile.ConfigTOML); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	stored, err := s.userProfiles.read(sub, profile.Name)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, profileDetail(stored))
+}
+
+func (s *Server) adminSettings(w http.ResponseWriter, r *http.Request) {
+	if !s.requireAdmin(w, r) {
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		settings, err := s.settings.get()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		writeJSON(w, settings)
+	case http.MethodPut:
+		body, err := io.ReadAll(io.LimitReader(r.Body, 1<<16))
+		if err != nil {
+			http.Error(w, "invalid request body", http.StatusBadRequest)
+			return
+		}
+		var settings types.ReservedSettings
+		if err := json.Unmarshal(body, &settings); err != nil {
+			http.Error(w, "invalid request body", http.StatusBadRequest)
+			return
+		}
+		if err := s.settings.put(settings); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		saved, err := s.settings.get()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		writeJSON(w, saved)
+	default:
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	}
 }

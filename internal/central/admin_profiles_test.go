@@ -164,3 +164,59 @@ func TestAdminMeUsesSubsAllowlist(t *testing.T) {
 		t.Fatalf("allowlist status=%d body=%s", got.Code, got.Body.String())
 	}
 }
+
+func TestAdminSettingsRoundTripAndValidation(t *testing.T) {
+	server, key := adminServerWithKey(t)
+	token := adminToken(t, key, "admin")
+
+	defaults := adminDo(server, http.MethodGet, "/v1/admin/settings", token, nil)
+	if defaults.Code != http.StatusOK || !strings.Contains(defaults.Body.String(), "\"provider\":\"memory\"") {
+		t.Fatalf("defaults status=%d body=%s", defaults.Code, defaults.Body.String())
+	}
+
+	custom := `{"provider":"gateway","baseURL":"https://gw.example/v1","wireAPI":"responses","envKey":"OPENAI_API_KEY"}`
+	saved := adminDo(server, http.MethodPut, "/v1/admin/settings", token, strings.NewReader(custom))
+	if saved.Code != http.StatusOK || !strings.Contains(saved.Body.String(), "\"provider\":\"gateway\"") {
+		t.Fatalf("save status=%d body=%s", saved.Code, saved.Body.String())
+	}
+	again := adminDo(server, http.MethodGet, "/v1/admin/settings", token, nil)
+	if !strings.Contains(again.Body.String(), "https://gw.example/v1") {
+		t.Fatalf("get after save body=%s", again.Body.String())
+	}
+
+	for _, bad := range []string{
+		`{"provider":"a.b","baseURL":"https://gw.example/v1","wireAPI":"responses","envKey":"OPENAI_API_KEY"}`,
+		`{"provider":"gw","baseURL":"not-a-url","wireAPI":"responses","envKey":"OPENAI_API_KEY"}`,
+		`{"provider":"gw","baseURL":"https://gw.example/v1","wireAPI":"responses","envKey":"1bad"}`,
+	} {
+		if got := adminDo(server, http.MethodPut, "/v1/admin/settings", token, strings.NewReader(bad)); got.Code != http.StatusBadRequest {
+			t.Fatalf("invalid settings accepted: %s -> %d", bad, got.Code)
+		}
+	}
+}
+
+func TestAdminApplyReservedUsesSettings(t *testing.T) {
+	server, key := adminServerWithKey(t)
+	token := adminToken(t, key, "admin")
+
+	settings := `{"provider":"memory","baseURL":"https://memory.example/codex/default","wireAPI":"responses","envKey":"OPENAI_API_KEY"}`
+	if got := adminDo(server, http.MethodPut, "/v1/admin/settings", token, strings.NewReader(settings)); got.Code != http.StatusOK {
+		t.Fatalf("settings save status=%d body=%s", got.Code, got.Body.String())
+	}
+
+	applied := adminDo(server, http.MethodPost, "/v1/admin/user-profiles/user-1", token, strings.NewReader(`{"apiKey":"sk-mem-abc"}`))
+	if applied.Code != http.StatusOK || !strings.Contains(applied.Body.String(), "\"provider\":\"memory\"") {
+		t.Fatalf("apply status=%d body=%s", applied.Code, applied.Body.String())
+	}
+
+	detail := adminDo(server, http.MethodGet, "/v1/admin/user-profiles/user-1/memory", token, nil)
+	body := detail.Body.String()
+	if detail.Code != http.StatusOK || !strings.Contains(body, "sk-mem-abc") || !strings.Contains(body, "https://memory.example/codex/default") || !strings.Contains(body, "experimental_bearer_token") {
+		t.Fatalf("detail status=%d body=%s", detail.Code, body)
+	}
+
+	empty := adminDo(server, http.MethodPost, "/v1/admin/user-profiles/user-1", token, strings.NewReader(`{"apiKey":""}`))
+	if empty.Code != http.StatusBadRequest {
+		t.Fatalf("empty api key status=%d", empty.Code)
+	}
+}
