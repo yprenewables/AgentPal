@@ -145,13 +145,98 @@ func (s *Server) authProfiles(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "profile not found", http.StatusNotFound)
 		return
 	}
+	writeJSON(w, profileDetail(profile))
+}
+
+func profileDetail(p reservedProfile) types.RemoteAuthProfileDetail {
 	var auth map[string]any
-	if err := json.Unmarshal(profile.AuthJSON, &auth); err != nil {
+	if err := json.Unmarshal(p.AuthJSON, &auth); err != nil {
 		auth = map[string]any{}
 	}
-	writeJSON(w, types.RemoteAuthProfileDetail{
-		Name: profile.Meta.Name, Provider: profile.Meta.Provider, Type: profile.Meta.Type,
-		ContentHash: profile.ContentHash, UpdatedAt: profile.UpdatedAt,
-		Auth: auth, ConfigAuthToml: string(profile.ConfigTOML),
-	})
+	return types.RemoteAuthProfileDetail{
+		Name: p.Meta.Name, Provider: p.Meta.Provider, Type: p.Meta.Type,
+		ContentHash: p.ContentHash, UpdatedAt: p.UpdatedAt,
+		Auth: auth, ConfigAuthToml: string(p.ConfigTOML),
+	}
+}
+
+func (s *userProfileStore) listUsers() ([]string, error) {
+	entries, err := os.ReadDir(s.root)
+	if os.IsNotExist(err) {
+		return []string{}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	result := []string{}
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		if _, err := security.SafeJoin(s.root, entry.Name(), "auth-profiles"); err != nil {
+			continue
+		}
+		items, err := s.list(entry.Name())
+		if err != nil || len(items) == 0 {
+			continue
+		}
+		result = append(result, entry.Name())
+	}
+	sort.Strings(result)
+	return result, nil
+}
+
+func (s *userProfileStore) write(sub, name string, meta reservedMeta, auth, config []byte) error {
+	if err := validateSubject(sub); err != nil {
+		return err
+	}
+	if err := authprofile.ValidateReservedName(name); err != nil {
+		return err
+	}
+	if meta.Name != name {
+		return errors.New("profile name does not match its path")
+	}
+	base, err := security.SafeJoin(s.root, sub, "auth-profiles")
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(base, 0o700); err != nil {
+		return err
+	}
+	temp, err := os.MkdirTemp(base, ".agentpal-write-")
+	if err != nil {
+		return err
+	}
+	defer func() { _ = os.RemoveAll(temp) }()
+	metaData, err := json.Marshal(meta)
+	if err != nil {
+		return err
+	}
+	for file, data := range map[string][]byte{"profile.json": metaData, "auth.json": auth, "config-auth.toml": config} {
+		if err := os.WriteFile(filepath.Join(temp, file), data, 0o600); err != nil {
+			return err
+		}
+	}
+	target := filepath.Join(base, name)
+	if err := os.RemoveAll(target); err != nil {
+		return err
+	}
+	return os.Rename(temp, target)
+}
+
+func (s *userProfileStore) delete(sub, name string) error {
+	if err := validateSubject(sub); err != nil {
+		return err
+	}
+	if err := authprofile.ValidateReservedName(name); err != nil {
+		return err
+	}
+	dir, err := security.SafeJoin(s.root, sub, "auth-profiles", name)
+	if err != nil {
+		return err
+	}
+	if _, err := os.Stat(dir); err != nil {
+		return err
+	}
+	return os.RemoveAll(dir)
 }

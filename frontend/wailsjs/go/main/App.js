@@ -10,6 +10,10 @@ export function ActivateAuthProfileWithConflict(arg1, arg2) {
   return window['go']['main']['App']['ActivateAuthProfileWithConflict'](arg1, arg2);
 }
 
+export function ApplyCentralAuthProfile(arg1) {
+  return window['go']['main']['App']['ApplyCentralAuthProfile'](arg1);
+}
+
 export function ApplyConfiguration(arg1) {
   return window['go']['main']['App']['ApplyConfiguration'](arg1);
 }
@@ -46,6 +50,10 @@ export function GetBootstrap() {
   return window['go']['main']['App']['GetBootstrap']();
 }
 
+export function GetCentralLoginState() {
+  return window['go']['main']['App']['GetCentralLoginState']();
+}
+
 export function GetCurrentAuthStatus() {
   return window['go']['main']['App']['GetCurrentAuthStatus']();
 }
@@ -70,12 +78,20 @@ export function ListRemoteBackups() {
   return window['go']['main']['App']['ListRemoteBackups']();
 }
 
+export function LogoutCentralLogin() {
+  return window['go']['main']['App']['LogoutCentralLogin']();
+}
+
 export function OpenFolder(arg1) {
   return window['go']['main']['App']['OpenFolder'](arg1);
 }
 
 export function OpenURL(arg1) {
   return window['go']['main']['App']['OpenURL'](arg1);
+}
+
+export function PollCentralLogin(arg1, arg2) {
+  return window['go']['main']['App']['PollCentralLogin'](arg1, arg2);
 }
 
 export function PreviewAuthProfile(arg1) {
@@ -94,30 +110,14 @@ export function SaveSettings(arg1) {
   return window['go']['main']['App']['SaveSettings'](arg1);
 }
 
-export function UploadAuthProfile(arg1, arg2) {
-  return window['go']['main']['App']['UploadAuthProfile'](arg1, arg2);
-}
-
 export function StartCentralLogin() {
   return window['go']['main']['App']['StartCentralLogin']();
-}
-
-export function PollCentralLogin(arg1, arg2) {
-  return window['go']['main']['App']['PollCentralLogin'](arg1, arg2);
-}
-
-export function GetCentralLoginState() {
-  return window['go']['main']['App']['GetCentralLoginState']();
-}
-
-export function LogoutCentralLogin() {
-  return window['go']['main']['App']['LogoutCentralLogin']();
 }
 
 export function SyncCentralAuthProfiles() {
   return window['go']['main']['App']['SyncCentralAuthProfiles']();
 }
 
-export function ApplyCentralAuthProfile(arg1) {
-  return window['go']['main']['App']['ApplyCentralAuthProfile'](arg1);
+export function UploadAuthProfile(arg1, arg2) {
+  return window['go']['main']['App']['UploadAuthProfile'](arg1, arg2);
 }

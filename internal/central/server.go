@@ -52,6 +52,9 @@ func NewServer(options types.ServerOptions) *Server {
 	mux.HandleFunc("/v1/auth-backups/", s.backup)
 	mux.HandleFunc("/v1/admin/status", s.adminStatus)
 	mux.HandleFunc("/agentpal/v1/admin/status", s.adminStatus)
+	mux.HandleFunc("/v1/admin/users", s.adminUsers)
+	mux.HandleFunc("/v1/admin/user-profiles", s.adminProfiles)
+	mux.HandleFunc("/v1/admin/user-profiles/", s.adminProfiles)
 	mux.HandleFunc("/v1/client/device/start", s.deviceStart)
 	mux.HandleFunc("/v1/client/device/", s.deviceRoute)
 	mux.HandleFunc("/agentpal", s.adminPage)
@@ -113,13 +116,57 @@ func (s *Server) adminPage(w http.ResponseWriter, r *http.Request) {
 
 const adminPageHTML = `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>AgentPal Central node</title>
-<style>body{margin:0;background:#eef2f6;color:#172033;font:16px system-ui,sans-serif}main{max-width:980px;margin:auto;padding:40px 20px}.header{display:flex;justify-content:space-between;align-items:center;margin-bottom:24px}.brand{font-size:24px;font-weight:800}.muted{color:#667385}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.card{background:#fff;border:1px solid #d9e0e8;border-radius:8px;padding:18px}.card strong{display:block;font-size:22px;margin-top:6px}.notice{background:#fff4d8;border-radius:8px;padding:14px;margin:16px 0}.error{background:#ffe8e8}@media(max-width:680px){.grid{grid-template-columns:1fr}.header{align-items:flex-start;gap:12px;flex-direction:column}}</style></head>
+<style>body{margin:0;background:#eef2f6;color:#172033;font:16px system-ui,sans-serif}main{max-width:980px;margin:auto;padding:40px 20px}.header{display:flex;justify-content:space-between;align-items:center;margin-bottom:24px}.brand{font-size:24px;font-weight:800}.muted{color:#667385}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.card{background:#fff;border:1px solid #d9e0e8;border-radius:8px;padding:18px}.card strong{display:block;font-size:22px;margin-top:6px}.card h2{margin:0 0 12px}.card h3{margin:18px 0 8px}.notice{background:#fff4d8;border-radius:8px;padding:14px;margin:16px 0}.error{background:#ffe8e8}label{display:block;margin:8px 0;color:#44506a}input,textarea{width:100%;box-sizing:border-box;padding:8px;border:1px solid #cdd6e0;border-radius:6px;font:inherit}textarea{font-family:ui-monospace,Menlo,monospace;font-size:13px}.row{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;align-items:end}.button-row{margin-top:12px;display:flex;gap:8px}button{cursor:pointer;border:1px solid #cdd6e0;background:#f6f8fb;border-radius:6px;padding:8px 12px;font:inherit}.button-row button.primary{background:#172033;color:#fff;border-color:#172033}.profile-row{display:flex;justify-content:space-between;align-items:center;gap:12px;border-top:1px solid #e6ebf1;padding:10px 0}.profile-row small{display:block;color:#667385}.profile-row button{margin-left:8px}.link{border:none;background:none;color:#1b6fd6;padding:4px 6px}@media(max-width:680px){.grid,.row{grid-template-columns:1fr}.header{align-items:flex-start;gap:12px;flex-direction:column}}</style></head>
 <body><main><div class="header"><div><div class="brand">AgentPal</div><div class="muted">Central node administration</div></div><div id="state" class="muted">Loading...</div></div>
- <section id="content"><div class="notice">Loading current node status...</div></section><div data-status-endpoint="/v1/admin/status"></div></main>
+ <section id="content"><div class="notice">Loading current node status...</div></section>
+ <section class="card" style="margin-top:16px">
+  <h2>Administrator token</h2>
+  <p class="muted">Paste a Portal administrator JWT to manage reserved profiles. It is kept only in this browser tab.</p>
+  <input id="token" type="password" placeholder="Portal admin JWT" autocomplete="off">
+  <div class="button-row"><button class="primary" id="useToken">Use token</button></div>
+ </section>
+ <section class="card" style="margin-top:16px">
+  <h2>User reserved profiles</h2>
+  <div class="notice">auth.json contains plaintext credentials. This page is intended for trusted LAN administrators only.</div>
+  <label>User sub <input id="sub" placeholder="Casdoor user id"></label>
+  <div class="button-row"><button id="loadProfiles">Load profiles</button><button id="loadUsers">List users</button></div>
+  <div id="subs"></div>
+  <div id="profileList"></div>
+  <h3>Create or overwrite</h3>
+  <div class="row">
+   <label>Name <input id="pName" placeholder="yangpu"></label>
+   <label>Type <input id="pType" placeholder="api_key"></label>
+   <label>Provider <input id="pProvider" placeholder="yangpu"></label>
+  </div>
+  <label>auth.json <textarea id="pAuth" rows="4" placeholder='{"OPENAI_API_KEY":"sk-..."}'></textarea></label>
+  <label>config-auth.toml <textarea id="pConfig" rows="6" placeholder='model_provider = "yangpu"'></textarea></label>
+  <div class="button-row"><button class="primary" id="saveProfile">Save</button><button id="deleteProfile">Delete</button></div>
+  <div id="profileMessage"></div>
+ </section>
+ </main>
 <script>
 const state=document.getElementById('state'), content=document.getElementById('content');
+const tokenKey='agentpal-admin-token';
+document.getElementById('token').value=sessionStorage.getItem(tokenKey)||'';
+function authHeaders(){const token=sessionStorage.getItem(tokenKey)||'';return token?{'Authorization':'Bearer '+token}:{};}
+function message(text,isError){const el=document.getElementById('profileMessage');el.className=isError?'notice error':'notice';el.textContent=text;}
+function clear(node){while(node.firstChild){node.removeChild(node.firstChild);}}
+function make(tag,text,className){const n=document.createElement(tag);if(text!==undefined){n.textContent=text;}if(className){n.className=className;}return n;}
+async function request(method,url,body){const options={method:method,headers:Object.assign({},authHeaders())};if(body!==undefined){options.headers['Content-Type']='application/json';options.body=JSON.stringify(body);}const response=await fetch(url,options);if(response.status===204){return null;}const text=await response.text();if(!response.ok){throw new Error(text||response.status);}return text?JSON.parse(text):null;}
+function renderSubs(subs){const host=document.getElementById('subs');clear(host);if(!subs.length){host.appendChild(make('span','No users yet.','muted'));return;}subs.forEach(function(sub){const b=make('button',sub,'link');b.onclick=function(){document.getElementById('sub').value=sub;loadProfiles();};host.appendChild(b);});}
+function renderProfiles(items){const host=document.getElementById('profileList');clear(host);if(!items||!items.length){host.appendChild(make('div','No reserved profiles for this user.','muted'));return;}items.forEach(function(item){const row=make('div','','profile-row');const info=make('div');info.appendChild(make('strong',item.name));info.appendChild(make('small',item.type+' / '+item.provider));row.appendChild(info);const actions=make('div');const edit=make('button','Edit','secondary');edit.onclick=function(){editProfile(item.name);};const del=make('button','Delete','danger');del.onclick=function(){deleteProfile(item.name);};actions.appendChild(edit);actions.appendChild(del);row.appendChild(actions);host.appendChild(row);});}
+async function loadUsers(){try{const subs=await request('GET','v1/admin/users');renderSubs(subs);}catch(error){message(String(error),true);}}
+async function loadProfiles(){const sub=document.getElementById('sub').value.trim();if(!sub){message('Enter a user sub first.',true);return;}try{const items=await request('GET','v1/admin/user-profiles/'+encodeURIComponent(sub));renderProfiles(items);message('Loaded '+(items?items.length:0)+' profile(s).');}catch(error){message(String(error),true);}}
+async function editProfile(name){const sub=document.getElementById('sub').value.trim();if(!sub){return;}try{const detail=await request('GET','v1/admin/user-profiles/'+encodeURIComponent(sub)+'/'+encodeURIComponent(name));document.getElementById('pName').value=detail.name;document.getElementById('pType').value=detail.type;document.getElementById('pProvider').value=detail.provider;document.getElementById('pAuth').value=JSON.stringify(detail.auth,null,2);document.getElementById('pConfig').value=detail.configAuthToml;message('Loaded '+name+' for editing.');}catch(error){message(String(error),true);}}
+async function saveProfile(){const sub=document.getElementById('sub').value.trim();const name=document.getElementById('pName').value.trim();if(!sub||!name){message('User sub and name are required.',true);return;}let auth;try{auth=JSON.parse(document.getElementById('pAuth').value||'{}');}catch(error){message('auth.json is not valid JSON.',true);return;}const body={type:document.getElementById('pType').value.trim(),provider:document.getElementById('pProvider').value.trim(),auth:auth,configAuthToml:document.getElementById('pConfig').value};try{await request('POST','v1/admin/user-profiles/'+encodeURIComponent(sub)+'/'+encodeURIComponent(name),body);message('Saved '+name+'.');loadProfiles();}catch(error){message(String(error),true);}}
+async function deleteProfile(name){const sub=document.getElementById('sub').value.trim();if(!sub){message('Enter a user sub first.',true);return;}const target=name||document.getElementById('pName').value.trim();if(!target){message('Enter a profile name first.',true);return;}if(!confirm('Delete reserved profile '+target+' for '+sub+'?')){return;}try{await request('DELETE','v1/admin/user-profiles/'+encodeURIComponent(sub)+'/'+encodeURIComponent(target));message('Deleted '+target+'.');loadProfiles();}catch(error){message(String(error),true);}}
+document.getElementById('useToken').onclick=function(){sessionStorage.setItem(tokenKey,document.getElementById('token').value.trim());message('Token stored in this tab.');};
+document.getElementById('loadProfiles').onclick=loadProfiles;
+document.getElementById('loadUsers').onclick=loadUsers;
+document.getElementById('saveProfile').onclick=saveProfile;
+document.getElementById('deleteProfile').onclick=function(){deleteProfile();};
  fetch('v1/admin/status',{credentials:'include'}).then(async response=>{if(!response.ok)throw new Error(response.status===401?'Administrator login required':'Central node status unavailable');return response.json()}).then(status=>{state.textContent='Running';content.innerHTML='<div class="grid"><div class="card"><span class="muted">Skills</span><strong>'+status.skills+'</strong></div><div class="card"><span class="muted">MCP servers</span><strong>'+status.mcp+'</strong></div><div class="card"><span class="muted">Listen port</span><strong>'+status.port+'</strong></div></div><div class="card" style="margin-top:12px"><span class="muted">Published Codex directory</span><p>'+status.codexDir+'</p><span class="muted">Last scan</span><p>'+new Date(status.generatedAt).toLocaleString()+'</p></div>'+(status.scanErrors&&status.scanErrors.length?'<div class="notice error"><strong>Scan errors</strong><p>'+status.scanErrors.map(error=>error.path+': '+error.error).join('<br>')+'</p></div>':'')}).catch(error=>{state.textContent='Unavailable';content.innerHTML='<div class="notice error">'+error.message+'</div>'});
-</script></body></html>`
+ </script></body></html>`
 
 func (s *Server) adminStatus(w http.ResponseWriter, r *http.Request) {
 	manifest, err := BuildManifest(s.options.CodexDir, time.Now().UTC())

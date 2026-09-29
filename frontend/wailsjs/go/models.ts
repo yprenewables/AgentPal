@@ -124,107 +124,15 @@ export namespace types {
 	        this.contentHash = source["contentHash"];
 	    }
 	}
-	export class LoginStart {
-	    loginId: string;
-	    pollToken: string;
-	    authorizeUrl: string;
-	    // Go type: time
-	    expiresAt: any;
-
-	    static createFrom(source: any = {}) {
-	        return new LoginStart(source);
-	    }
-
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.loginId = source["loginId"];
-	        this.pollToken = source["pollToken"];
-	        this.authorizeUrl = source["authorizeUrl"];
-	        this.expiresAt = this.convertValues(source["expiresAt"], null);
-	    }
-
-		convertValues(a: any, classs: any, asMap: boolean = false): any {
-		    if (!a) {
-		        return a;
-		    }
-		    if (a.slice && a.map) {
-		        return (a as any[]).map(elem => this.convertValues(elem, classs));
-		    } else if ("object" === typeof a) {
-		        if (asMap) {
-		            for (const key of Object.keys(a)) {
-		                a[key] = new classs(a[key]);
-		            }
-		            return a;
-		        }
-		        return new classs(a);
-		    }
-		    return a;
-		}
-	}
-	export class LoginStatus {
-	    status: string;
-	    subject?: string;
-	    accessToken?: string;
-	    expiresIn?: number;
-	    error?: string;
-
-	    static createFrom(source: any = {}) {
-	        return new LoginStatus(source);
-	    }
-
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.status = source["status"];
-	        this.subject = source["subject"];
-	        this.accessToken = source["accessToken"];
-	        this.expiresIn = source["expiresIn"];
-	        this.error = source["error"];
-	    }
-	}
-	export class CentralLoginState {
-	    loggedIn: boolean;
-	    subject?: string;
-	    // Go type: time
-	    expiresAt?: any;
-
-	    static createFrom(source: any = {}) {
-	        return new CentralLoginState(source);
-	    }
-
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.loggedIn = source["loggedIn"];
-	        this.subject = source["subject"];
-	        this.expiresAt = this.convertValues(source["expiresAt"], null);
-	    }
-
-		convertValues(a: any, classs: any, asMap: boolean = false): any {
-		    if (!a) {
-		        return a;
-		    }
-		    if (a.slice && a.map) {
-		        return (a as any[]).map(elem => this.convertValues(elem, classs));
-		    } else if ("object" === typeof a) {
-		        if (asMap) {
-		            for (const key of Object.keys(a)) {
-		                a[key] = new classs(a[key]);
-		            }
-		            return a;
-		        }
-		        return new classs(a);
-		    }
-		    return a;
-		}
-	}
 	export class AuthSyncItem {
 	    name: string;
 	    status: string;
 	    detail?: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new AuthSyncItem(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.name = source["name"];
@@ -234,16 +142,16 @@ export namespace types {
 	}
 	export class AuthSyncReport {
 	    items: AuthSyncItem[];
-
+	
 	    static createFrom(source: any = {}) {
 	        return new AuthSyncReport(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.items = this.convertValues(source["items"], AuthSyncItem);
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -453,6 +361,41 @@ export namespace types {
 		}
 	}
 	
+	export class CentralLoginState {
+	    loggedIn: boolean;
+	    subject?: string;
+	    // Go type: time
+	    expiresAt?: any;
+	
+	    static createFrom(source: any = {}) {
+	        return new CentralLoginState(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.loggedIn = source["loggedIn"];
+	        this.subject = source["subject"];
+	        this.expiresAt = this.convertValues(source["expiresAt"], null);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class DiffItem {
 	    kind: string;
 	    name: string;
@@ -563,6 +506,63 @@ export namespace types {
 	}
 	
 	
+	export class LoginStart {
+	    loginId: string;
+	    pollToken: string;
+	    authorizeUrl: string;
+	    // Go type: time
+	    expiresAt: any;
+	
+	    static createFrom(source: any = {}) {
+	        return new LoginStart(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.loginId = source["loginId"];
+	        this.pollToken = source["pollToken"];
+	        this.authorizeUrl = source["authorizeUrl"];
+	        this.expiresAt = this.convertValues(source["expiresAt"], null);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class LoginStatus {
+	    status: string;
+	    subject?: string;
+	    accessToken?: string;
+	    expiresIn?: number;
+	    error?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new LoginStatus(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.status = source["status"];
+	        this.subject = source["subject"];
+	        this.accessToken = source["accessToken"];
+	        this.expiresIn = source["expiresIn"];
+	        this.error = source["error"];
+	    }
+	}
 	export class ProfileSwitchPreview {
 	    profile: AuthProfile;
 	    provider: string;

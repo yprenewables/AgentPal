@@ -6,6 +6,8 @@ export function ActivateAuthProfile(arg1:string):Promise<types.ProfileSwitchResu
 
 export function ActivateAuthProfileWithConflict(arg1:string,arg2:boolean):Promise<types.ProfileSwitchResult>;
 
+export function ApplyCentralAuthProfile(arg1:string):Promise<types.AuthProfile>;
+
 export function ApplyConfiguration(arg1:types.ApplyRequest):Promise<types.ApplyResult>;
 
 export function BrowseFolder():Promise<string>;
@@ -24,6 +26,8 @@ export function GetBackupRoot():Promise<string>;
 
 export function GetBootstrap():Promise<types.Bootstrap>;
 
+export function GetCentralLoginState():Promise<types.CentralLoginState>;
+
 export function GetCurrentAuthStatus():Promise<types.CurrentAuthStatus>;
 
 export function GetDefaultCodexDir():Promise<string>;
@@ -36,9 +40,13 @@ export function ListAuthProfiles():Promise<Array<types.AuthProfile>>;
 
 export function ListRemoteBackups():Promise<Array<types.BackupInfo>>;
 
+export function LogoutCentralLogin():Promise<void>;
+
 export function OpenFolder(arg1:string):Promise<void>;
 
 export function OpenURL(arg1:string):Promise<void>;
+
+export function PollCentralLogin(arg1:string,arg2:string):Promise<types.LoginStatus>;
 
 export function PreviewAuthProfile(arg1:string):Promise<types.ProfileSwitchPreview>;
 
@@ -48,16 +56,8 @@ export function RestoreAuthProfile(arg1:string,arg2:string):Promise<types.AuthPr
 
 export function SaveSettings(arg1:types.SettingsRequest):Promise<types.Bootstrap>;
 
-export function UploadAuthProfile(arg1:string,arg2:boolean):Promise<void>;
-
 export function StartCentralLogin():Promise<types.LoginStart>;
-
-export function PollCentralLogin(arg1:string,arg2:string):Promise<types.LoginStatus>;
-
-export function GetCentralLoginState():Promise<types.CentralLoginState>;
-
-export function LogoutCentralLogin():Promise<void>;
 
 export function SyncCentralAuthProfiles():Promise<types.AuthSyncReport>;
 
-export function ApplyCentralAuthProfile(arg1:string):Promise<types.AuthProfile>;
+export function UploadAuthProfile(arg1:string,arg2:boolean):Promise<void>;

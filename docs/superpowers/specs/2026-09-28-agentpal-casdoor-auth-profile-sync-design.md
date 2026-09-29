@@ -20,7 +20,8 @@ AgentPal 已有认证档案的本地管理和中心备份能力，但认证档�
 ### 2.1 本设计包含
 
 - Central Host 的 Casdoor OAuth 登录（Authorization Code + PKCE）。
-- Central Host 按 JWT `sub` 隔离的用户预留 profile 只读存储。
+- Central Host 按 JWT `sub` 隔离的用户预留 profile 存储。
+- Central Host 管理员通过 Portal 管理员 JWT 鉴权的管理页与写入 API 维护用户预留 profile。
 - 客户端登录、轮询取 token、请求中心预留 profile。
 - 同名 profile 的新增、已同步、需要同步三态判定。
 - 冲突时由用户确认后才覆盖本地 profile。
@@ -29,7 +30,6 @@ AgentPal 已有认证档案的本地管理和中心备份能力，但认证档�
 
 - JWT 签名校验（本设计明确只解析 payload 读取 `sub`，信任内网）。
 - refresh token 续期（只保留 access token）。
-- 中心侧预留 profile 的管理界面（由管理员手动放目录）。
 - 自动激活/切换同步下来的 profile。
 - 修改现有认证备份（`/v1/auth-backups`）链路。
 - 多组织、多租户、公网 HTTPS 部署。
@@ -263,7 +263,27 @@ func ParseJWTSubject(token string) (string, error)
 - `profile.json` 必须包含 `name`、`type`、`provider`；缺失或非法时该 profile 跳过并在列表接口中忽略。
 - `config-auth.toml` 必须包含 `model_provider`，且其值必须等于目录名 `<name>`；否则跳过。
 - 列表接口只返回元数据，不返回 `auth.json` 与 `config-auth.toml` 内容。
-- 服务端不写入、不修改用户目录。
+- 服务端通过管理员写入 API 维护用户目录（见 5.9）。
+
+### 5.9 管理员预留 profile 管理
+
+新增接口，全部要求 Portal 管理员 JWT（`adminAuth.VerifyRequest`，`role=admin`）。当 `AdminJWTPublic` 未配置时返回 `503`，token 缺失或非管理员返回 `401`。
+
+```text
+GET    /v1/admin/users
+GET    /v1/admin/user-profiles/<sub>
+GET    /v1/admin/user-profiles/<sub>/<name>
+POST   /v1/admin/user-profiles/<sub>/<name>
+DELETE /v1/admin/user-profiles/<sub>/<name>
+```
+
+- `GET /v1/admin/users` 返回有预留 profile 的 `sub` 列表。
+- `GET /v1/admin/user-profiles/<sub>` 返回该 `sub` 的 profile 元数据列表。
+- `GET /v1/admin/user-profiles/<sub>/<name>` 返回完整 profile，含明文 `auth.json` 与 `config-auth.toml`。
+- `POST` 请求体：`{ "type", "provider", "auth": {...}, "configAuthToml": "..." }`，创建或覆盖。
+- 校验：`sub` 走 `validateSubject`（拒绝 `/`、`\`、`:`、`..`）；`name` 走 `ValidateReservedName`；`auth` 必须是 JSON 对象；`configAuthToml` 必须能解析且 `model_provider == name`。
+- 写入先落到临时目录再原子替换目标目录，目录 `0700`、文件 `0600`。
+- 管理页 `/agentpal` 提供 token 输入（存 `sessionStorage`，请求带 `Authorization: Bearer`）与 profile 列表、创建/覆盖、删除、编辑表单；页面明确提示 `auth.json` 为明文凭据。
 
 ### 5.8 内容哈希
 

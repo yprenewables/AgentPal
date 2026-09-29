@@ -73,7 +73,7 @@ Central Host 通过 Casdoor（默认 `https://id.yprenew.com`）做 OAuth 登录
 -user-store-dir      默认 ~/.agentpal/server/users
 ```
 
-管理员按用户 `sub` 手动放置预留 profile（服务端只读）：
+管理员可以用管理页 `/agentpal`（粘贴 Portal 管理员 JWT）维护用户预留 profile，也可以直接放目录（格式如下）：
 
 ```text
 ~/.agentpal/server/users/<sub>/auth-profiles/<name>/
@@ -104,7 +104,15 @@ GET  /v1/auth/login/status/<loginId>?pollToken=<pollToken>
 GET  /callback
 GET  /v1/auth-profiles
 GET  /v1/auth-profiles/<name>
+
+GET    /v1/admin/users
+GET    /v1/admin/user-profiles/<sub>
+GET    /v1/admin/user-profiles/<sub>/<name>
+POST   /v1/admin/user-profiles/<sub>/<name>
+DELETE /v1/admin/user-profiles/<sub>/<name>
 ```
+
+`/v1/admin/*` 需要 Portal 管理员 JWT；未配置 `-admin-jwt-public-key` 时返回 `503`。管理页在 `/agentpal`，粘贴管理员 JWT 后可列出/新增/覆盖/删除用户预留 profile。
 
 Server 不在配置清单中发布 `auth.json`。所有路径都会进行安全校验，拒绝绝对路径和路径穿越。
 
