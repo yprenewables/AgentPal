@@ -18,16 +18,99 @@ type adminProfileRequest struct {
 	ConfigAuthToml string         `json:"configAuthToml"`
 }
 
-func (s *Server) requireAdmin(w http.ResponseWriter, r *http.Request) bool {
-	if s.adminAuth == nil {
-		http.Error(w, "administrator authentication is not configured", http.StatusServiceUnavailable)
-		return false
+// adminSubject 返回发起请求的管理员 subject。
+// 状态码为 0 表示通过；否则为应返回的 HTTP 状态码与错误信息。
+func (s *Server) adminSubject(r *http.Request) (string, int, string) {
+	if s.adminAuth == nil && strings.TrimSpace(s.options.CasdoorURL) == "" {
+		return "", http.StatusServiceUnavailable, "administrator authentication is not configured"
 	}
-	if _, err := s.adminAuth.VerifyRequest(r); err != nil {
-		http.Error(w, "administrator login required", http.StatusUnauthorized)
+	if s.adminAuth != nil {
+		if claims, err := s.adminAuth.VerifySessionRequest(r); err == nil {
+			if claims.Role == "admin" {
+				return claims.Subject, 0, ""
+			}
+			return "", http.StatusForbidden, "this account is not authorized for administration"
+		}
+	}
+	if strings.TrimSpace(s.options.CasdoorURL) == "" {
+		return "", http.StatusUnauthorized, "administrator login required"
+	}
+	token := requestBearer(r)
+	if token == "" {
+		return "", http.StatusUnauthorized, "administrator login required"
+	}
+	payload, err := ParseJWTClaims(token)
+	if err != nil {
+		return "", http.StatusUnauthorized, "administrator login required"
+	}
+	issuer, _ := payload["iss"].(string)
+	if strings.TrimRight(issuer, "/") != strings.TrimRight(s.options.CasdoorURL, "/") {
+		return "", http.StatusUnauthorized, "administrator login required"
+	}
+	subject, _ := payload["sub"].(string)
+	if err := validateSubject(subject); err != nil {
+		return "", http.StatusUnauthorized, "administrator login required"
+	}
+	if !s.isAdmin(subject, payload) {
+		return "", http.StatusForbidden, "this account is not authorized for administration"
+	}
+	return subject, 0, ""
+}
+
+func (s *Server) isAdmin(subject string, payload map[string]any) bool {
+	claim := strings.TrimSpace(s.options.CasdoorAdminClaim)
+	if claim == "" {
+		claim = "isAdmin"
+	}
+	if truthy(payload[claim]) {
+		return true
+	}
+	for _, candidate := range strings.Split(s.options.AdminSubs, ",") {
+		if strings.TrimSpace(candidate) == subject {
+			return true
+		}
+	}
+	return false
+}
+
+func truthy(value any) bool {
+	switch typed := value.(type) {
+	case bool:
+		return typed
+	case string:
+		switch strings.ToLower(strings.TrimSpace(typed)) {
+		case "true", "admin", "1":
+			return true
+		}
+	case []any:
+		for _, item := range typed {
+			if truthy(item) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func (s *Server) requireAdmin(w http.ResponseWriter, r *http.Request) bool {
+	if _, status, message := s.adminSubject(r); status != 0 {
+		http.Error(w, message, status)
 		return false
 	}
 	return true
+}
+
+func (s *Server) adminMe(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	subject, status, message := s.adminSubject(r)
+	if status != 0 {
+		http.Error(w, message, status)
+		return
+	}
+	writeJSON(w, map[string]any{"subject": subject, "admin": true})
 }
 
 func (s *Server) adminUsers(w http.ResponseWriter, r *http.Request) {

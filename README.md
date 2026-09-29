@@ -69,11 +69,13 @@ Central Host 通过 Casdoor（默认 `https://id.yprenew.com`）做 OAuth 登录
 -casdoor-url         默认 https://id.yprenew.com
 -casdoor-client-id   Casdoor 应用 client ID（必填，否则登录接口返回 503）
 -casdoor-scopes      默认 "openid profile"
+-casdoor-admin-claim 判定管理员的 Casdoor token claim，默认 isAdmin
+-admin-subs          逗号分隔、始终视为管理员的 Casdoor sub 列表（可选）
 -oauth-redirect-url  Casdoor 中登记的 Redirect URI
 -user-store-dir      默认 ~/.agentpal/server/users
 ```
 
-管理员可以用管理页 `/agentpal`（粘贴 Portal 管理员 JWT）维护用户预留 profile，也可以直接放目录（格式如下）：
+管理员可以用管理页 `/agentpal`（点击登录跳转 Casdoor）维护用户预留 profile，也可以直接放目录（格式如下）：
 
 ```text
 ~/.agentpal/server/users/<sub>/auth-profiles/<name>/
@@ -106,13 +108,14 @@ GET  /v1/auth-profiles
 GET  /v1/auth-profiles/<name>
 
 GET    /v1/admin/users
+GET    /v1/admin/me
 GET    /v1/admin/user-profiles/<sub>
 GET    /v1/admin/user-profiles/<sub>/<name>
 POST   /v1/admin/user-profiles/<sub>/<name>
 DELETE /v1/admin/user-profiles/<sub>/<name>
 ```
 
-`/v1/admin/*` 需要 Portal 管理员 JWT；未配置 `-admin-jwt-public-key` 时返回 `503`。管理页在 `/agentpal`，粘贴管理员 JWT 后可列出/新增/覆盖/删除用户预留 profile。
+管理页在 `/agentpal`，使用与客户端相同的 Casdoor 登录流程：点击登录会跳转 Casdoor，回调后自动进入。只有管理员账号可以进入。`/v1/admin/*` 接受两类管理员令牌：带管理员 claim 的 Casdoor 令牌（默认 claim `isAdmin`，可用 `-casdoor-admin-claim` 修改），或 Portal 管理员令牌（`-admin-jwt-public-key`）。两者都未配置时返回 `503`；已登录但非管理员返回 `403`。
 
 Server 不在配置清单中发布 `auth.json`。所有路径都会进行安全校验，拒绝绝对路径和路径穿越。
 

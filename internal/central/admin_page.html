@@ -1,0 +1,414 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AgentPal 中心节点管理</title>
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #eef2f6; color: #172033; font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 1080px; margin: auto; padding: 32px 20px 60px; }
+  h1, h2, h3 { margin: 0; }
+  h2 { font-size: 18px; }
+  h3 { font-size: 15px; margin-top: 20px; }
+  .muted { color: #667385; }
+  .hidden { display: none !important; }
+  .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+  .brand { font-size: 22px; font-weight: 800; }
+  .card { background: #fff; border: 1px solid #d9e0e8; border-radius: 10px; padding: 18px; }
+  .card + .card { margin-top: 16px; }
+  .card-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+  .notice { border-radius: 8px; padding: 12px 14px; margin: 12px 0; background: #eef4ff; color: #1c3d70; }
+  .notice.error { background: #ffe8e8; color: #8a1f1f; }
+  .notice.warn { background: #fff4d8; color: #7a5b12; }
+  .notice.success { background: #e7f6ec; color: #1c6b3a; }
+  label { display: block; margin: 10px 0; color: #44506a; font-size: 14px; }
+  input, textarea { width: 100%; padding: 9px; border: 1px solid #cdd6e0; border-radius: 7px; font: inherit; margin-top: 4px; }
+  textarea { font-family: ui-monospace, Menlo, monospace; font-size: 13px; }
+  button { cursor: pointer; border: 1px solid #cdd6e0; background: #f6f8fb; border-radius: 7px; padding: 9px 14px; font: inherit; }
+  button:hover { background: #eef2f7; }
+  button.primary { background: #172033; color: #fff; border-color: #172033; }
+  button.primary:hover { background: #23304a; }
+  button.danger { color: #a32424; border-color: #e3c4c4; background: #fff6f6; }
+  button:disabled { opacity: .6; cursor: default; }
+  .button-row { display: flex; gap: 8px; margin-top: 14px; }
+  .tabs { display: flex; gap: 8px; margin-bottom: 16px; border-bottom: 1px solid #d9e0e8; }
+  .tab { border: none; background: none; border-radius: 0; padding: 10px 14px; color: #667385; border-bottom: 2px solid transparent; }
+  .tab.active { color: #172033; font-weight: 600; border-bottom-color: #172033; }
+  .tab.right { margin-left: auto; color: #a32424; }
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .metric strong { display: block; font-size: 22px; margin-top: 4px; }
+  .layout { display: grid; grid-template-columns: 300px 1fr; gap: 16px; align-items: start; }
+  .user-list { display: flex; flex-direction: column; gap: 4px; min-height: 40px; }
+  .user-item { text-align: left; border: 1px solid transparent; background: #f7f9fc; justify-content: flex-start; }
+  .user-item.active { border-color: #172033; background: #eef2f7; font-weight: 600; }
+  .new-user { display: flex; gap: 8px; margin-top: 12px; }
+  .new-user input { margin-top: 0; }
+  .profile-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; border-top: 1px solid #e6ebf1; padding: 10px 0; }
+  .profile-row small { display: block; color: #667385; }
+  .profile-row button { margin-left: 8px; }
+  .row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .login-card { max-width: 460px; margin: 40px auto; text-align: center; }
+  .login-card button { margin-top: 12px; }
+  @media (max-width: 760px) { .grid, .row, .layout { grid-template-columns: 1fr; } .header { flex-direction: column; align-items: flex-start; gap: 8px; } }
+</style>
+</head>
+<body>
+<main>
+  <div class="header">
+    <div><div class="brand">AgentPal</div><div class="muted">中心节点管理</div></div>
+    <div id="session" class="muted"></div>
+  </div>
+
+  <section id="loginView" class="card login-card">
+    <h2>管理员登录</h2>
+    <p class="muted">使用 Casdoor 账号登录，与客户端共用同一登录流程。只有被授权为管理员的账号可以进入管理后台。</p>
+    <div id="loginMessage" class="notice error hidden"></div>
+    <button class="primary" id="loginButton">使用 Casdoor 登录</button>
+  </section>
+
+  <section id="appView" class="hidden">
+    <nav class="tabs">
+      <button id="tabOverview" class="tab active">概览</button>
+      <button id="tabUsers" class="tab">用户</button>
+      <button id="logoutButton" class="tab right">退出登录</button>
+    </nav>
+
+    <div id="overviewPanel">
+      <div id="content"><div class="notice">加载节点状态...</div></div>
+    </div>
+
+    <div id="usersPanel" class="hidden">
+      <div class="layout">
+        <div class="card">
+          <div class="card-head"><h2>用户</h2><button id="refreshUsers">刷新</button></div>
+          <div id="userList" class="user-list"></div>
+          <div class="new-user">
+            <input id="userSub" placeholder="用户 sub（Casdoor 用户 ID）">
+            <button id="selectUserButton">选择</button>
+          </div>
+          <div id="userMessage"></div>
+        </div>
+        <div class="card">
+          <div class="card-head"><h2 id="profilesTitle">预留 profile</h2></div>
+          <div id="profileList"></div>
+          <h3>新增 / 覆盖</h3>
+          <div class="row">
+            <label>名称 <input id="pName" placeholder="yangpu"></label>
+            <label>类型 <input id="pType" placeholder="api_key"></label>
+            <label>Provider <input id="pProvider" placeholder="yangpu"></label>
+          </div>
+          <label>auth.json <textarea id="pAuth" rows="4" placeholder='{"OPENAI_API_KEY":"sk-..."}'></textarea></label>
+          <label>config-auth.toml <textarea id="pConfig" rows="6" placeholder='model_provider = "yangpu"'></textarea></label>
+          <div class="button-row"><button class="primary" id="saveProfile">保存</button><button id="deleteProfile">删除</button></div>
+          <div id="profileMessage"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script>
+const TOKEN_KEY = 'agentpal-admin-token';
+const LOGIN_ID_KEY = 'agentpal-login-id';
+const LOGIN_POLL_KEY = 'agentpal-login-poll';
+const state = { token: '', subject: '', users: [], selected: '', profiles: [] };
+
+function $(id) { return document.getElementById(id); }
+function clear(node) { while (node.firstChild) { node.removeChild(node.firstChild); } }
+function make(tag, text, className) { const n = document.createElement(tag); if (text !== undefined) { n.textContent = text; } if (className) { n.className = className; } return n; }
+function authHeaders() { return state.token ? { 'Authorization': 'Bearer ' + state.token } : {}; }
+
+function notice(id, text, kind) {
+  const el = $(id);
+  if (!text) { el.className = 'notice hidden'; el.textContent = ''; return; }
+  el.className = 'notice' + (kind ? ' ' + kind : '');
+  el.textContent = text;
+}
+
+function requestError(response, text) {
+  const error = new Error(text || String(response.status));
+  error.status = response.status;
+  return error;
+}
+
+async function request(method, url, body) {
+  const options = { method: method, headers: Object.assign({}, authHeaders()) };
+  if (body !== undefined) { options.headers['Content-Type'] = 'application/json'; options.body = JSON.stringify(body); }
+  const response = await fetch(url, options);
+  if (response.status === 204) { return null; }
+  const text = await response.text();
+  if (!response.ok) { throw requestError(response, text); }
+  return text ? JSON.parse(text) : null;
+}
+
+function handleAdminError(error) {
+  if (error && error.status === 401) {
+    state.token = '';
+    sessionStorage.removeItem(TOKEN_KEY);
+    showLogin('登录已过期，请重新登录。');
+    return;
+  }
+  return error && error.message ? error.message : String(error);
+}
+
+function showLogin(message) {
+  $('appView').classList.add('hidden');
+  $('loginView').classList.remove('hidden');
+  $('session').textContent = '';
+  notice('loginMessage', message || '', 'error');
+}
+
+function showApp() {
+  $('loginView').classList.add('hidden');
+  $('appView').classList.remove('hidden');
+  $('session').textContent = state.subject ? ('已登录：' + state.subject) : '';
+  loadStatus();
+  switchTab('overview');
+}
+
+async function loadMe() {
+  const me = await request('GET', '/v1/admin/me');
+  state.subject = me.subject;
+  return true;
+}
+
+async function bootstrap() {
+  const loginId = sessionStorage.getItem(LOGIN_ID_KEY);
+  const pollToken = sessionStorage.getItem(LOGIN_POLL_KEY);
+  if (loginId && pollToken) {
+    sessionStorage.removeItem(LOGIN_ID_KEY);
+    sessionStorage.removeItem(LOGIN_POLL_KEY);
+    try {
+      const status = await pollLogin(loginId, pollToken);
+      if (status.status === 'approved' && status.accessToken) {
+        state.token = status.accessToken;
+        sessionStorage.setItem(TOKEN_KEY, status.accessToken);
+      } else if (status.status === 'failed') {
+        showLogin('登录失败：' + (status.error || '未知错误'));
+        return;
+      }
+    } catch (error) {
+      showLogin('登录未完成，请重试。');
+      return;
+    }
+  }
+  if (!state.token) { state.token = sessionStorage.getItem(TOKEN_KEY) || ''; }
+  if (!state.token) { showLogin(); return; }
+  try {
+    await loadMe();
+    showApp();
+  } catch (error) {
+    state.token = '';
+    sessionStorage.removeItem(TOKEN_KEY);
+    showLogin(error.status === 403 ? '该账号没有管理权限。' : '登录已过期，请重新登录。');
+  }
+}
+
+async function pollLogin(loginId, pollToken) {
+  const response = await fetch('/v1/auth/login/status/' + encodeURIComponent(loginId) + '?pollToken=' + encodeURIComponent(pollToken));
+  const text = await response.text();
+  if (!response.ok) { throw requestError(response, text); }
+  return JSON.parse(text);
+}
+
+async function login() {
+  const button = $('loginButton');
+  button.disabled = true;
+  button.textContent = '正在跳转 Casdoor...';
+  notice('loginMessage', '', 'error');
+  try {
+    const response = await fetch('/v1/auth/login/start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ returnTo: '/agentpal' }) });
+    const text = await response.text();
+    if (!response.ok) { throw new Error(text || String(response.status)); }
+    const info = JSON.parse(text);
+    sessionStorage.setItem(LOGIN_ID_KEY, info.loginId);
+    sessionStorage.setItem(LOGIN_POLL_KEY, info.pollToken);
+    window.location = info.authorizeUrl;
+  } catch (error) {
+    button.disabled = false;
+    button.textContent = '使用 Casdoor 登录';
+    notice('loginMessage', '无法发起登录：' + (error.message || error), 'error');
+  }
+}
+
+function logout() {
+  state.token = '';
+  state.subject = '';
+  state.users = [];
+  state.selected = '';
+  state.profiles = [];
+  sessionStorage.removeItem(TOKEN_KEY);
+  showLogin('已退出登录。');
+}
+
+function switchTab(tab) {
+  const users = tab === 'users';
+  $('tabOverview').classList.toggle('active', !users);
+  $('tabUsers').classList.toggle('active', users);
+  $('overviewPanel').classList.toggle('hidden', users);
+  $('usersPanel').classList.toggle('hidden', !users);
+  if (users) { loadUsers(); }
+}
+
+async function loadStatus() {
+  try {
+    const status = await fetch('/v1/admin/status', { credentials: 'include' }).then(function (response) { return response.json(); });
+    const content = $('content');
+    clear(content);
+    const grid = make('div', undefined, 'grid');
+    [['Skills', status.skills], ['MCP 服务', status.mcp], ['监听端口', status.port]].forEach(function (pair) {
+      const card = make('div', undefined, 'card metric');
+      card.appendChild(make('span', pair[0], 'muted'));
+      card.appendChild(make('strong', String(pair[1])));
+      grid.appendChild(card);
+    });
+    content.appendChild(grid);
+    const info = make('div', undefined, 'card');
+    info.appendChild(make('span', '发布目录', 'muted'));
+    info.appendChild(make('p', status.codexDir));
+    info.appendChild(make('span', '最近扫描', 'muted'));
+    info.appendChild(make('p', new Date(status.generatedAt).toLocaleString()));
+    content.appendChild(info);
+    if (status.scanErrors && status.scanErrors.length) {
+      const err = make('div', undefined, 'notice error');
+      err.appendChild(make('strong', '扫描错误'));
+      status.scanErrors.forEach(function (item) { err.appendChild(make('p', item.path + ': ' + item.error)); });
+      content.appendChild(err);
+    }
+  } catch (error) {
+    const content = $('content');
+    clear(content);
+    content.appendChild(make('div', '节点状态不可用。', 'notice error'));
+  }
+}
+
+async function loadUsers() {
+  notice('userMessage', '', '');
+  try {
+    state.users = await request('GET', '/v1/admin/users');
+    renderUsers();
+  } catch (error) {
+    const handled = handleAdminError(error);
+    if (handled) { notice('userMessage', handled, 'error'); }
+  }
+}
+
+function renderUsers() {
+  const host = $('userList');
+  clear(host);
+  if (!state.users.length) { host.appendChild(make('div', '还没有任何用户。', 'muted')); return; }
+  state.users.forEach(function (sub) {
+    const item = make('button', sub, 'user-item' + (sub === state.selected ? ' active' : ''));
+    item.onclick = function () { selectUser(sub); };
+    host.appendChild(item);
+  });
+}
+
+async function selectUser(sub) {
+  state.selected = sub;
+  $('userSub').value = sub;
+  renderUsers();
+  try {
+    state.profiles = await request('GET', '/v1/admin/user-profiles/' + encodeURIComponent(sub));
+  } catch (error) {
+    const handled = handleAdminError(error);
+    if (handled) { notice('userMessage', handled, 'error'); }
+    state.profiles = [];
+  }
+  renderProfiles();
+}
+
+function renderProfiles() {
+  const host = $('profileList');
+  clear(host);
+  $('profilesTitle').textContent = state.selected ? ('用户 ' + state.selected + ' 的预留 profile') : '预留 profile';
+  if (!state.selected) { host.appendChild(make('div', '从左侧选择一个用户。', 'muted')); return; }
+  if (!state.profiles.length) { host.appendChild(make('div', '该用户还没有预留 profile。', 'muted')); return; }
+  state.profiles.forEach(function (item) {
+    const row = make('div', undefined, 'profile-row');
+    const info = make('div');
+    info.appendChild(make('strong', item.name));
+    info.appendChild(make('small', item.type + ' / ' + item.provider + ' / ' + String(item.contentHash || '').slice(0, 18)));
+    row.appendChild(info);
+    const actions = make('div');
+    const edit = make('button', '编辑', 'secondary');
+    edit.onclick = function () { editProfile(item.name); };
+    const del = make('button', '删除', 'danger');
+    del.onclick = function () { deleteProfile(item.name); };
+    actions.appendChild(edit);
+    actions.appendChild(del);
+    row.appendChild(actions);
+    host.appendChild(row);
+  });
+}
+
+async function editProfile(name) {
+  notice('profileMessage', '', '');
+  try {
+    const detail = await request('GET', '/v1/admin/user-profiles/' + encodeURIComponent(state.selected) + '/' + encodeURIComponent(name));
+    $('pName').value = detail.name;
+    $('pType').value = detail.type;
+    $('pProvider').value = detail.provider;
+    $('pAuth').value = JSON.stringify(detail.auth, null, 2);
+    $('pConfig').value = detail.configAuthToml;
+    notice('profileMessage', '已载入 ' + name + '，可编辑后保存。', 'success');
+  } catch (error) {
+    const handled = handleAdminError(error);
+    if (handled) { notice('profileMessage', handled, 'error'); }
+  }
+}
+
+async function saveProfile() {
+  notice('profileMessage', '', '');
+  const sub = $('userSub').value.trim();
+  const name = $('pName').value.trim();
+  if (!sub || !name) { notice('profileMessage', '需要填写用户 sub 与 profile 名称。', 'warn'); return; }
+  let auth;
+  try { auth = JSON.parse($('pAuth').value || '{}'); } catch (error) { notice('profileMessage', 'auth.json 不是合法 JSON。', 'warn'); return; }
+  const body = { type: $('pType').value.trim(), provider: $('pProvider').value.trim(), auth: auth, configAuthToml: $('pConfig').value };
+  try {
+    await request('POST', '/v1/admin/user-profiles/' + encodeURIComponent(sub) + '/' + encodeURIComponent(name), body);
+    notice('profileMessage', '已保存 ' + name + '。', 'success');
+    state.selected = sub;
+    $('userSub').value = sub;
+    await loadUsers();
+    await selectUser(sub);
+  } catch (error) {
+    const handled = handleAdminError(error);
+    if (handled) { notice('profileMessage', handled, 'error'); }
+  }
+}
+
+async function deleteProfile(name) {
+  const target = name || $('pName').value.trim();
+  if (!state.selected || !target) { notice('profileMessage', '请先选择用户与 profile。', 'warn'); return; }
+  if (!window.confirm('删除用户 ' + state.selected + ' 的 profile ' + target + '？')) { return; }
+  try {
+    await request('DELETE', '/v1/admin/user-profiles/' + encodeURIComponent(state.selected) + '/' + encodeURIComponent(target));
+    notice('profileMessage', '已删除 ' + target + '。', 'success');
+    await loadUsers();
+    await selectUser(state.selected);
+  } catch (error) {
+    const handled = handleAdminError(error);
+    if (handled) { notice('profileMessage', handled, 'error'); }
+  }
+}
+
+$('loginButton').onclick = login;
+$('logoutButton').onclick = logout;
+$('tabOverview').onclick = function () { switchTab('overview'); };
+$('tabUsers').onclick = function () { switchTab('users'); };
+$('refreshUsers').onclick = loadUsers;
+$('selectUserButton').onclick = function () {
+  const sub = $('userSub').value.trim();
+  if (sub) { if (!state.users.includes(sub)) { state.users.push(sub); state.users.sort(); renderUsers(); } selectUser(sub); }
+};
+$('saveProfile').onclick = saveProfile;
+$('deleteProfile').onclick = function () { deleteProfile(); };
+
+bootstrap();
+</script>
+</body>
+</html>

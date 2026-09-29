@@ -25,6 +25,8 @@ func main() {
 	casdoorURL := flag.String("casdoor-url", "https://id.yprenew.com", "Casdoor base URL")
 	casdoorClientID := flag.String("casdoor-client-id", "", "Casdoor application client ID")
 	casdoorScopes := flag.String("casdoor-scopes", "openid profile", "Casdoor authorization scopes")
+	casdoorAdminClaim := flag.String("casdoor-admin-claim", "isAdmin", "Casdoor token claim that marks an administrator")
+	adminSubs := flag.String("admin-subs", "", "comma-separated Casdoor subs always treated as administrators")
 	oauthRedirectURL := flag.String("oauth-redirect-url", "", "OAuth redirect URL registered on the Casdoor application")
 	userStoreDir := flag.String("user-store-dir", "~/.agentpal/server/users", "central user reserved profile directory")
 	flag.Parse()
@@ -42,16 +44,18 @@ func main() {
 		log.Fatal(err)
 	}
 	server := central.NewServer(types.ServerOptions{
-		CodexDir:         expandedCodexDir,
-		Port:             *port,
-		AdminJWTIssuer:   *adminIssuer,
-		AdminJWTPublic:   *adminPublicKey,
-		PortalLoginURL:   *portalLoginURL,
-		CasdoorURL:       *casdoorURL,
-		CasdoorClientID:  *casdoorClientID,
-		CasdoorScopes:    *casdoorScopes,
-		OAuthRedirectURL: *oauthRedirectURL,
-		UserStoreDir:     expandedUserStoreDir,
+		CodexDir:          expandedCodexDir,
+		Port:              *port,
+		AdminJWTIssuer:    *adminIssuer,
+		AdminJWTPublic:    *adminPublicKey,
+		PortalLoginURL:    *portalLoginURL,
+		CasdoorURL:        *casdoorURL,
+		CasdoorClientID:   *casdoorClientID,
+		CasdoorScopes:     *casdoorScopes,
+		CasdoorAdminClaim: *casdoorAdminClaim,
+		AdminSubs:         *adminSubs,
+		OAuthRedirectURL:  *oauthRedirectURL,
+		UserStoreDir:      expandedUserStoreDir,
 	})
 	server.BackupDir = expandedBackupDir
 	if err := server.Start(); err != nil {

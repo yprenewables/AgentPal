@@ -109,7 +109,7 @@ func TestAdminProfilesRequireAdminAuth(t *testing.T) {
 		t.Fatalf("missing token status=%d", got.Code)
 	}
 	member := adminToken(t, key, "member")
-	if got := adminDo(server, http.MethodGet, "/v1/admin/users", member, nil); got.Code != http.StatusUnauthorized {
+	if got := adminDo(server, http.MethodGet, "/v1/admin/users", member, nil); got.Code != http.StatusForbidden {
 		t.Fatalf("member token status=%d", got.Code)
 	}
 	if got := adminDo(server, http.MethodPost, "/v1/admin/user-profiles/user-1/yangpu", "", strings.NewReader(adminProfileBody)); got.Code != http.StatusUnauthorized {
@@ -137,5 +137,30 @@ func TestAdminProfileWriteValidation(t *testing.T) {
 		if got.Code != http.StatusBadRequest {
 			t.Fatalf("path=%s status=%d body=%s", item.path, got.Code, got.Body.String())
 		}
+	}
+}
+
+func TestAdminProfilesAcceptCasdoorAdminClaim(t *testing.T) {
+	server := NewServer(types.ServerOptions{CodexDir: t.TempDir(), Port: 28888, UserStoreDir: t.TempDir(), CasdoorURL: "https://id.yprenew.com"})
+	admin := unsignedJWT(t, map[string]any{"iss": "https://id.yprenew.com", "sub": "user-1", "isAdmin": true})
+	if got := adminDo(server, http.MethodGet, "/v1/admin/users", admin, nil); got.Code != http.StatusOK {
+		t.Fatalf("admin claim status=%d body=%s", got.Code, got.Body.String())
+	}
+	plain := unsignedJWT(t, map[string]any{"iss": "https://id.yprenew.com", "sub": "user-2"})
+	if got := adminDo(server, http.MethodGet, "/v1/admin/users", plain, nil); got.Code != http.StatusForbidden {
+		t.Fatalf("non-admin status=%d", got.Code)
+	}
+	wrongIssuer := unsignedJWT(t, map[string]any{"iss": "https://evil.example", "sub": "user-1", "isAdmin": true})
+	if got := adminDo(server, http.MethodGet, "/v1/admin/users", wrongIssuer, nil); got.Code != http.StatusUnauthorized {
+		t.Fatalf("wrong issuer status=%d", got.Code)
+	}
+}
+
+func TestAdminMeUsesSubsAllowlist(t *testing.T) {
+	server := NewServer(types.ServerOptions{CodexDir: t.TempDir(), Port: 28888, UserStoreDir: t.TempDir(), CasdoorURL: "https://id.yprenew.com", AdminSubs: "user-9, user-10"})
+	token := unsignedJWT(t, map[string]any{"iss": "https://id.yprenew.com", "sub": "user-9"})
+	got := adminDo(server, http.MethodGet, "/v1/admin/me", token, nil)
+	if got.Code != http.StatusOK || !strings.Contains(got.Body.String(), "user-9") {
+		t.Fatalf("allowlist status=%d body=%s", got.Code, got.Body.String())
 	}
 }

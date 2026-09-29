@@ -25,17 +25,19 @@ type SettingsRequest struct {
 }
 
 type ServerOptions struct {
-	CodexDir         string `json:"codexDir"`
-	Port             int    `json:"port"`
-	AdminJWTIssuer   string `json:"adminJWTIssuer,omitempty"`
-	AdminJWTPublic   string `json:"adminJWTPublic,omitempty"`
-	PortalLoginURL   string `json:"portalLoginURL,omitempty"`
-	AllowTestAuth    bool   `json:"allowTestAuth,omitempty"`
-	CasdoorURL       string `json:"casdoorURL,omitempty"`
-	CasdoorClientID  string `json:"casdoorClientID,omitempty"`
-	CasdoorScopes    string `json:"casdoorScopes,omitempty"`
-	OAuthRedirectURL string `json:"oauthRedirectURL,omitempty"`
-	UserStoreDir     string `json:"userStoreDir,omitempty"`
+	CodexDir          string `json:"codexDir"`
+	Port              int    `json:"port"`
+	AdminJWTIssuer    string `json:"adminJWTIssuer,omitempty"`
+	AdminJWTPublic    string `json:"adminJWTPublic,omitempty"`
+	PortalLoginURL    string `json:"portalLoginURL,omitempty"`
+	AllowTestAuth     bool   `json:"allowTestAuth,omitempty"`
+	CasdoorURL        string `json:"casdoorURL,omitempty"`
+	CasdoorClientID   string `json:"casdoorClientID,omitempty"`
+	CasdoorScopes     string `json:"casdoorScopes,omitempty"`
+	CasdoorAdminClaim string `json:"casdoorAdminClaim,omitempty"`
+	OAuthRedirectURL  string `json:"oauthRedirectURL,omitempty"`
+	UserStoreDir      string `json:"userStoreDir,omitempty"`
+	AdminSubs         string `json:"adminSubs,omitempty"`
 }
 
 type AdminStatus struct {

@@ -25,6 +25,7 @@ type pendingLogin struct {
 	CodeVerifier string
 	Challenge    string
 	RedirectURL  string
+	ReturnTo     string
 	CreatedAt    time.Time
 	ExpiresAt    time.Time
 	Approved     bool
@@ -51,7 +52,7 @@ func codeChallenge(verifier string) string {
 	return base64.RawURLEncoding.EncodeToString(digest[:])
 }
 
-func (p *pendingLogins) start(redirectURL string) (*pendingLogin, error) {
+func (p *pendingLogins) start(redirectURL, returnTo string) (*pendingLogin, error) {
 	id, err := randomToken(24)
 	if err != nil {
 		return nil, err
@@ -72,7 +73,7 @@ func (p *pendingLogins) start(redirectURL string) (*pendingLogin, error) {
 	item := &pendingLogin{
 		ID: id, PollToken: pollToken, State: state,
 		CodeVerifier: verifier, Challenge: codeChallenge(verifier),
-		RedirectURL: redirectURL, CreatedAt: now, ExpiresAt: now.Add(loginTTL),
+		RedirectURL: redirectURL, ReturnTo: returnTo, CreatedAt: now, ExpiresAt: now.Add(loginTTL),
 	}
 	p.mu.Lock()
 	p.items[id] = item
@@ -158,7 +159,13 @@ func (s *Server) oauthStart(w http.ResponseWriter, r *http.Request) {
 	if redirect == "" {
 		redirect = "http://" + r.Host + "/callback"
 	}
-	item, err := s.logins.start(redirect)
+	var request struct {
+		ReturnTo string `json:"returnTo"`
+	}
+	if r.Body != nil {
+		_ = json.NewDecoder(io.LimitReader(r.Body, 1<<16)).Decode(&request)
+	}
+	item, err := s.logins.start(redirect, sanitizeReturnTo(request.ReturnTo))
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -221,8 +228,26 @@ func (s *Server) oauthCallback(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusGone)
 		return
 	}
+	if strings.TrimSpace(item.ReturnTo) != "" {
+		http.Redirect(w, r, item.ReturnTo, http.StatusFound)
+		return
+	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	_, _ = io.WriteString(w, "<!doctype html><meta name=viewport content=width=device-width><title>AgentPal login</title><style>body{font:16px system-ui;max-width:600px;margin:60px auto;padding:20px;color:#172033}</style><h1>Login complete</h1><p>You can return to the AgentPal application.</p>")
+}
+
+// sanitizeReturnTo 只允许同源绝对路径，避免开放重定向。
+func sanitizeReturnTo(value string) string {
+	value = strings.TrimSpace(value)
+	if !strings.HasPrefix(value, "/") || strings.HasPrefix(value, "//") || strings.Contains(value, "\\") {
+		return ""
+	}
+	for _, r := range value {
+		if r < 0x20 || r == 0x7f {
+			return ""
+		}
+	}
+	return value
 }
 
 func (s *Server) exchangeCode(redirectURL, code, verifier string) (string, int, error) {

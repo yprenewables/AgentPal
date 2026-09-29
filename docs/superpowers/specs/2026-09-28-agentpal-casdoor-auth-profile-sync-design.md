@@ -267,23 +267,32 @@ func ParseJWTSubject(token string) (string, error)
 
 ### 5.9 管理员预留 profile 管理
 
-新增接口，全部要求 Portal 管理员 JWT（`adminAuth.VerifyRequest`，`role=admin`）。当 `AdminJWTPublic` 未配置时返回 `503`，token 缺失或非管理员返回 `401`。
+新增接口。管理员登录复用与客户端相同的 Casdoor OAuth 流程：管理页点击登录后跳转 Casdoor，回调 `/callback` 完成授权并重定向回 `/agentpal`，页面轮询取回 access token 并存入 `sessionStorage`。
+
+管理员身份判定：请求携带的令牌可以是
+- 带管理员 claim 的 Casdoor 令牌（claim 名由 `-casdoor-admin-claim` 配置，默认 `isAdmin`；也支持 `-admin-subs` 白名单）；或
+- Portal 管理员令牌（`adminAuth`，`role=admin`）。
+
+两者都未配置时返回 `503`；无令牌或令牌不可识别返回 `401`；令牌有效但非管理员返回 `403`。
 
 ```text
 GET    /v1/admin/users
+GET    /v1/admin/me
 GET    /v1/admin/user-profiles/<sub>
 GET    /v1/admin/user-profiles/<sub>/<name>
 POST   /v1/admin/user-profiles/<sub>/<name>
 DELETE /v1/admin/user-profiles/<sub>/<name>
 ```
 
-- `GET /v1/admin/users` 返回有预留 profile 的 `sub` 列表。
+- `GET /v1/admin/me` 返回当前管理员的 `subject`，用于管理页判断登录状态。
+- `GET /v1/admin/users` 只列出仍有至少一个合法预留 profile 的 `sub`。
 - `GET /v1/admin/user-profiles/<sub>` 返回该 `sub` 的 profile 元数据列表。
 - `GET /v1/admin/user-profiles/<sub>/<name>` 返回完整 profile，含明文 `auth.json` 与 `config-auth.toml`。
 - `POST` 请求体：`{ "type", "provider", "auth": {...}, "configAuthToml": "..." }`，创建或覆盖。
 - 校验：`sub` 走 `validateSubject`（拒绝 `/`、`\`、`:`、`..`）；`name` 走 `ValidateReservedName`；`auth` 必须是 JSON 对象；`configAuthToml` 必须能解析且 `model_provider == name`。
 - 写入先落到临时目录再原子替换目标目录，目录 `0700`、文件 `0600`。
-- 管理页 `/agentpal` 提供 token 输入（存 `sessionStorage`，请求带 `Authorization: Bearer`）与 profile 列表、创建/覆盖、删除、编辑表单；页面明确提示 `auth.json` 为明文凭据。
+- 管理页 `/agentpal` 用静态 HTML（`internal/central/admin_page.html`，`go:embed` 嵌入）实现：未登录显示登录卡片（点击跳转 Casdoor），登录后显示「概览 / 用户」两个标签；用户标签为左侧用户列表 + 右侧该用户的预留 profile 列表与新增/覆盖/编辑/删除表单；页面明确提示 `auth.json` 为明文凭据。
+- 登录回跳通过 `/v1/auth/login/start` 的可选 `returnTo` 实现，仅接受同源绝对路径（`sanitizeReturnTo`），避免开放重定向。
 
 ### 5.8 内容哈希
 

@@ -114,3 +114,41 @@ func TestLoginStartRequiresCasdoorConfiguration(t *testing.T) {
 		t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
 	}
 }
+
+func TestLoginCallbackRedirectsToReturnTo(t *testing.T) {
+	accessToken := unsignedJWT(t, map[string]any{"sub": "user-1"})
+	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"access_token": accessToken, "expires_in": 3600})
+	}))
+	defer stub.Close()
+	server := NewServer(types.ServerOptions{CodexDir: t.TempDir(), Port: 28888, CasdoorURL: stub.URL, CasdoorClientID: "cid", OAuthRedirectURL: "http://central.test/callback"})
+
+	recorder := httptest.NewRecorder()
+	server.Handler().ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/v1/auth/login/start", strings.NewReader(`{"returnTo":"/agentpal"}`)))
+	var start types.LoginStart
+	if err := json.Unmarshal(recorder.Body.Bytes(), &start); err != nil {
+		t.Fatal(err)
+	}
+	parsed, err := url.Parse(start.AuthorizeURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	callback := httptest.NewRecorder()
+	server.Handler().ServeHTTP(callback, httptest.NewRequest(http.MethodGet, "/callback?code=abc&state="+url.QueryEscape(parsed.Query().Get("state")), nil))
+	if callback.Code != http.StatusFound || callback.Header().Get("Location") != "/agentpal" {
+		t.Fatalf("callback status=%d location=%q", callback.Code, callback.Header().Get("Location"))
+	}
+}
+
+func TestSanitizeReturnTo(t *testing.T) {
+	for _, value := range []string{"/agentpal", "/a/b?x=1"} {
+		if got := sanitizeReturnTo(value); got != value {
+			t.Fatalf("rejected %q -> %q", value, got)
+		}
+	}
+	for _, value := range []string{"", "//evil.example", "https://evil.example", "agentpal", "/a\\b", "/a\nb"} {
+		if got := sanitizeReturnTo(value); got != "" {
+			t.Fatalf("accepted %q -> %q", value, got)
+		}
+	}
+}

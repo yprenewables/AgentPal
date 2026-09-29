@@ -16,7 +16,7 @@ func TestAdminPageIsServedAtAgentPalSubpath(t *testing.T) {
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
 	}
-	for _, marker := range []string{"Central node", "User reserved profiles", "v1/admin/status"} {
+	for _, marker := range []string{"中心节点管理", "使用 Casdoor 登录", "/v1/admin/status"} {
 		if !strings.Contains(recorder.Body.String(), marker) {
 			t.Fatalf("page missing %q", marker)
 		}
