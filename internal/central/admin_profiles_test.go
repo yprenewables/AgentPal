@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
+	"encoding/json"
 	"encoding/pem"
 	"io"
 	"net/http"
@@ -18,6 +19,10 @@ import (
 )
 
 func adminServerWithKey(t *testing.T) (*Server, *rsa.PrivateKey) {
+	return adminServerWithStore(t, t.TempDir())
+}
+
+func adminServerWithStore(t *testing.T, root string) (*Server, *rsa.PrivateKey) {
 	t.Helper()
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
@@ -31,7 +36,7 @@ func adminServerWithKey(t *testing.T) (*Server, *rsa.PrivateKey) {
 	if err := os.WriteFile(keyPath, pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: der}), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	server := NewServer(types.ServerOptions{CodexDir: t.TempDir(), Port: 28888, UserStoreDir: t.TempDir(), AdminJWTIssuer: "internal-sso-portal", AdminJWTPublic: keyPath})
+	server := NewServer(types.ServerOptions{CodexDir: t.TempDir(), Port: 28888, UserStoreDir: root, AdminJWTIssuer: "internal-sso-portal", AdminJWTPublic: keyPath})
 	return server, key
 }
 
@@ -218,5 +223,57 @@ func TestAdminApplyReservedUsesSettings(t *testing.T) {
 	empty := adminDo(server, http.MethodPost, "/v1/admin/user-profiles/user-1", token, strings.NewReader(`{"apiKey":""}`))
 	if empty.Code != http.StatusBadRequest {
 		t.Fatalf("empty api key status=%d", empty.Code)
+	}
+}
+
+func TestAdminAllProfilesListsEveryUser(t *testing.T) {
+	root := t.TempDir()
+	writeReservedProfile(t, root, "user-1", "memory", "memory")
+	writeReservedProfile(t, root, "user-2", "memory", "memory")
+	server, key := adminServerWithStore(t, root)
+	token := adminToken(t, key, "admin")
+
+	got := adminDo(server, http.MethodGet, "/v1/admin/profiles", token, nil)
+	if got.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", got.Code, got.Body.String())
+	}
+	body := got.Body.String()
+	if !strings.Contains(body, "\"sub\":\"user-1\"") || !strings.Contains(body, "\"sub\":\"user-2\"") || !strings.Contains(body, "\"name\":\"memory\"") {
+		t.Fatalf("body=%s", body)
+	}
+	if got := adminDo(server, http.MethodGet, "/v1/admin/profiles", "", nil); got.Code != http.StatusUnauthorized {
+		t.Fatalf("unauthorized status=%d", got.Code)
+	}
+}
+
+func TestAdminCasdoorUsersProxiesUserList(t *testing.T) {
+	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/get-users" || r.URL.Query().Get("owner") != "built-in" {
+			http.Error(w, "unexpected path", http.StatusBadRequest)
+			return
+		}
+		if r.Header.Get("Authorization") == "" {
+			http.Error(w, "missing token", http.StatusUnauthorized)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"status": "ok",
+			"data": []map[string]any{
+				{"id": "uuid-alice", "name": "alice", "displayName": "Alice", "email": "alice@example.com"},
+				{"id": "uuid-bob", "name": "bob", "displayName": "Bob"},
+			},
+		})
+	}))
+	defer stub.Close()
+
+	server := NewServer(types.ServerOptions{CodexDir: t.TempDir(), Port: 28888, UserStoreDir: t.TempDir(), CasdoorURL: stub.URL, CasdoorOrganization: "built-in"})
+	token := unsignedJWT(t, map[string]any{"iss": stub.URL, "sub": "admin", "isAdmin": true})
+	got := adminDo(server, http.MethodGet, "/v1/admin/casdoor-users", token, nil)
+	if got.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", got.Code, got.Body.String())
+	}
+	body := got.Body.String()
+	if !strings.Contains(body, "\"sub\":\"uuid-alice\"") || !strings.Contains(body, "\"displayName\":\"Alice\"") || !strings.Contains(body, "uuid-bob") {
+		t.Fatalf("body=%s", body)
 	}
 }

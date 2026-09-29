@@ -24,7 +24,7 @@
   .notice.warn { background: #fff4d8; color: #7a5b12; }
   .notice.success { background: #e7f6ec; color: #1c6b3a; }
   label { display: block; margin: 10px 0; color: #44506a; font-size: 14px; }
-  input { width: 100%; padding: 9px; border: 1px solid #cdd6e0; border-radius: 7px; font: inherit; margin-top: 4px; }
+  input, select { width: 100%; padding: 9px; border: 1px solid #cdd6e0; border-radius: 7px; font: inherit; margin-top: 4px; background: #fff; }
   button { cursor: pointer; border: 1px solid #cdd6e0; background: #f6f8fb; border-radius: 7px; padding: 9px 14px; font: inherit; }
   button:hover { background: #eef2f7; }
   button.primary { background: #172033; color: #fff; border-color: #172033; }
@@ -38,19 +38,19 @@
   .tab.right { margin-left: auto; color: #a32424; }
   .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
   .metric strong { display: block; font-size: 22px; margin-top: 4px; }
-  .layout { display: grid; grid-template-columns: 300px 1fr; gap: 16px; align-items: start; }
-  .user-list { display: flex; flex-direction: column; gap: 4px; min-height: 40px; }
-  .user-item { text-align: left; border: 1px solid transparent; background: #f7f9fc; justify-content: flex-start; }
-  .user-item.active { border-color: #172033; background: #eef2f7; font-weight: 600; }
-  .new-user { display: flex; gap: 8px; margin-top: 12px; }
-  .new-user input { margin-top: 0; }
-  .profile-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; border-top: 1px solid #e6ebf1; padding: 10px 0; }
-  .profile-row small { display: block; color: #667385; }
-  .profile-row button { margin-left: 8px; }
+  table.table { width: 100%; border-collapse: collapse; }
+  table.table th, table.table td { text-align: left; padding: 10px 8px; border-bottom: 1px solid #e6ebf1; }
+  table.table th { color: #667385; font-weight: 600; font-size: 13px; }
+  table.table td { font-size: 14px; }
   .row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
   .login-card { max-width: 460px; margin: 40px auto; text-align: center; }
   .login-card button { margin-top: 12px; }
-  @media (max-width: 760px) { .grid, .row, .layout { grid-template-columns: 1fr; } .header { flex-direction: column; align-items: flex-start; gap: 8px; } }
+  .dialog-backdrop { position: fixed; inset: 0; background: rgba(16,24,40,.45); display: flex; align-items: center; justify-content: center; padding: 20px; z-index: 20; }
+  .dialog { background: #fff; border-radius: 12px; padding: 20px; width: 100%; max-width: 520px; box-shadow: 0 20px 50px rgba(16,24,40,.25); }
+  .dialog .card-head { margin-bottom: 6px; }
+  .icon-button { border: none; background: none; font-size: 20px; line-height: 1; padding: 4px 8px; color: #667385; }
+  .icon-button:hover { background: #eef2f7; }
+  @media (max-width: 760px) { .grid, .row { grid-template-columns: 1fr; } .header { flex-direction: column; align-items: flex-start; gap: 8px; } }
 </style>
 </head>
 <body>
@@ -70,7 +70,7 @@
   <section id="appView" class="hidden">
     <nav class="tabs">
       <button id="tabOverview" class="tab active">概览</button>
-      <button id="tabUsers" class="tab">用户</button>
+      <button id="tabProfiles" class="tab">Auth Profiles</button>
       <button id="tabSettings" class="tab">系统配置</button>
       <button id="logoutButton" class="tab right">退出登录</button>
     </nav>
@@ -79,34 +79,43 @@
       <div id="content"><div class="notice">加载节点状态...</div></div>
     </div>
 
-    <div id="usersPanel" class="hidden">
-      <div class="layout">
-        <div class="card">
-          <div class="card-head"><h2>用户</h2><button id="refreshUsers">刷新</button></div>
-          <div id="userList" class="user-list"></div>
-          <div class="new-user">
-            <input id="userSub" placeholder="用户 sub（Casdoor 用户 ID）">
-            <button id="selectUserButton">选择</button>
+    <div id="profilesPanel" class="hidden">
+      <div class="card">
+        <div class="card-head">
+          <h2>所有预留 Auth Profile</h2>
+          <div class="button-row" style="margin:0">
+            <button id="refreshProfiles">刷新</button>
+            <button class="primary" id="openCreate">新增 / 覆盖</button>
           </div>
-          <div id="userMessage"></div>
         </div>
-        <div class="card">
-          <div class="card-head"><h2 id="profilesTitle">预留 profile</h2></div>
-          <div id="profileList"></div>
-          <h3>录入 API Key</h3>
-          <p class="muted" id="providerHint">统一 provider：-</p>
-          <p class="muted">其余内容（provider、base_url、wire_api、类型 api_key）由系统配置预填，保存即覆盖该用户的预留 profile。</p>
-          <label>API Key <input id="apiKey" type="password" placeholder="sk-..." autocomplete="off"></label>
-          <div class="button-row"><button class="primary" id="applyApiKey">保存并确认</button></div>
-          <div id="profileMessage"></div>
+        <div id="profileTable"></div>
+        <div id="profileMessage"></div>
+      </div>
+    </div>
+
+    <div id="createDialog" class="dialog-backdrop hidden">
+      <div class="dialog">
+        <div class="card-head">
+          <h3>新增 / 覆盖预留 profile</h3>
+          <button class="icon-button" id="closeCreate" aria-label="关闭">×</button>
         </div>
+        <p class="muted" id="providerHint">统一 provider：-</p>
+        <p class="muted">选择关联用户并录入 API Key，其余内容（provider、base_url、wire_api、类型 api_key）由系统配置预填。</p>
+        <div class="row">
+          <label id="userSelectLabel">Casdoor 用户 <select id="userSelect"></select></label>
+          <label id="userManualLabel" class="hidden">用户 sub（Casdoor 用户 ID） <input id="userManual" placeholder="user id"></label>
+        </div>
+        <div id="userHint"></div>
+        <label>API Key <input id="apiKey" type="password" placeholder="sk-..." autocomplete="off"></label>
+        <div class="button-row"><button class="secondary" id="cancelCreate">取消</button><button class="primary" id="applyApiKey">保存并确认</button></div>
+        <div id="createMessage"></div>
       </div>
     </div>
 
     <div id="settingsPanel" class="hidden">
       <div class="card">
         <div class="card-head"><h2>统一 provider 配置</h2></div>
-        <p class="muted">这些参数用于生成所有用户的预留 profile。管理员在「用户」页只需录入 API Key。</p>
+        <p class="muted">这些参数用于生成所有用户的预留 profile。管理员在「Auth Profiles」页只需录入 API Key。</p>
         <div class="row">
           <label>Provider 名称 <input id="sProvider" placeholder="memory"></label>
           <label>wire_api <input id="sWireAPI" placeholder="responses"></label>
@@ -124,7 +133,7 @@
 const TOKEN_KEY = 'agentpal-admin-token';
 const LOGIN_ID_KEY = 'agentpal-login-id';
 const LOGIN_POLL_KEY = 'agentpal-login-poll';
-const state = { token: '', subject: '', users: [], selected: '', profiles: [], settings: null };
+const state = { token: '', subject: '', profiles: [], casdoorUsers: [], casdoorLoaded: false, settings: null };
 
 function $(id) { return document.getElementById(id); }
 function clear(node) { while (node.firstChild) { node.removeChild(node.firstChild); } }
@@ -175,6 +184,7 @@ function showApp() {
   $('loginView').classList.add('hidden');
   $('appView').classList.remove('hidden');
   $('session').textContent = state.subject ? ('已登录：' + state.subject) : '';
+  closeCreate();
   loadStatus();
   loadSettings();
   switchTab('overview');
@@ -248,9 +258,9 @@ async function login() {
 function logout() {
   state.token = '';
   state.subject = '';
-  state.users = [];
-  state.selected = '';
   state.profiles = [];
+  state.casdoorUsers = [];
+  state.casdoorLoaded = false;
   state.settings = null;
   sessionStorage.removeItem(TOKEN_KEY);
   showLogin('已退出登录。');
@@ -258,12 +268,18 @@ function logout() {
 
 function switchTab(tab) {
   $('tabOverview').classList.toggle('active', tab === 'overview');
-  $('tabUsers').classList.toggle('active', tab === 'users');
+  $('tabProfiles').classList.toggle('active', tab === 'profiles');
   $('tabSettings').classList.toggle('active', tab === 'settings');
   $('overviewPanel').classList.toggle('hidden', tab !== 'overview');
-  $('usersPanel').classList.toggle('hidden', tab !== 'users');
+  $('profilesPanel').classList.toggle('hidden', tab !== 'profiles');
   $('settingsPanel').classList.toggle('hidden', tab !== 'settings');
-  if (tab === 'users') { loadUsers(); }
+  if (tab === 'profiles') {
+    loadProfiles();
+    renderUserOptions();
+    if (!state.casdoorLoaded) { loadCasdoorUsers(); }
+  } else {
+    closeCreate();
+  }
   if (tab === 'settings') { loadSettings(); }
 }
 
@@ -332,92 +348,121 @@ async function saveSettings() {
   }
 }
 
-async function loadUsers() {
-  notice('userMessage', '', '');
+async function loadProfiles() {
   try {
-    state.users = await request('GET', '/v1/admin/users');
-    renderUsers();
-  } catch (error) {
-    const handled = handleAdminError(error);
-    if (handled) { notice('userMessage', handled, 'error'); }
-  }
-}
-
-function renderUsers() {
-  const host = $('userList');
-  clear(host);
-  if (!state.users.length) { host.appendChild(make('div', '还没有任何用户。', 'muted')); return; }
-  state.users.forEach(function (sub) {
-    const item = make('button', sub, 'user-item' + (sub === state.selected ? ' active' : ''));
-    item.onclick = function () { selectUser(sub); };
-    host.appendChild(item);
-  });
-}
-
-async function selectUser(sub) {
-  state.selected = sub;
-  $('userSub').value = sub;
-  renderUsers();
-  try {
-    state.profiles = await request('GET', '/v1/admin/user-profiles/' + encodeURIComponent(sub));
-  } catch (error) {
-    const handled = handleAdminError(error);
-    if (handled) { notice('userMessage', handled, 'error'); }
-    state.profiles = [];
-  }
-  renderProfiles();
-}
-
-function renderProfiles() {
-  const host = $('profileList');
-  clear(host);
-  $('profilesTitle').textContent = state.selected ? ('用户 ' + state.selected + ' 的预留 profile') : '预留 profile';
-  if (!state.selected) { host.appendChild(make('div', '从左侧选择一个用户。', 'muted')); return; }
-  if (!state.profiles.length) { host.appendChild(make('div', '该用户还没有预留 profile，录入 API Key 即可创建。', 'muted')); return; }
-  state.profiles.forEach(function (item) {
-    const row = make('div', undefined, 'profile-row');
-    const info = make('div');
-    info.appendChild(make('strong', item.name));
-    info.appendChild(make('small', item.type + ' / ' + item.provider + ' / ' + String(item.contentHash || '').slice(0, 18)));
-    row.appendChild(info);
-    const actions = make('div');
-    const del = make('button', '删除', 'danger');
-    del.onclick = function () { deleteProfile(item.name); };
-    actions.appendChild(del);
-    row.appendChild(actions);
-    host.appendChild(row);
-  });
-}
-
-async function applyApiKey() {
-  notice('profileMessage', '', '');
-  const sub = $('userSub').value.trim() || state.selected;
-  const apiKey = $('apiKey').value.trim();
-  if (!sub) { notice('profileMessage', '请先选择用户。', 'warn'); return; }
-  if (!apiKey) { notice('profileMessage', '请输入 API Key。', 'warn'); return; }
-  try {
-    await request('POST', '/v1/admin/user-profiles/' + encodeURIComponent(sub), { apiKey: apiKey });
-    notice('profileMessage', '已为 ' + sub + ' 保存预留 profile。', 'success');
-    $('apiKey').value = '';
-    state.selected = sub;
-    $('userSub').value = sub;
-    await loadUsers();
-    await selectUser(sub);
+    state.profiles = await request('GET', '/v1/admin/profiles');
+    renderProfilesTable();
   } catch (error) {
     const handled = handleAdminError(error);
     if (handled) { notice('profileMessage', handled, 'error'); }
   }
 }
 
-async function deleteProfile(name) {
-  const target = name || (state.profiles[0] && state.profiles[0].name);
-  if (!state.selected || !target) { notice('profileMessage', '请先选择用户与 profile。', 'warn'); return; }
-  if (!window.confirm('删除用户 ' + state.selected + ' 的预留 profile ' + target + '？')) { return; }
+function renderProfilesTable() {
+  const host = $('profileTable');
+  clear(host);
+  if (!state.profiles.length) { host.appendChild(make('div', '还没有任何预留 profile。', 'muted')); return; }
+  const table = make('table', undefined, 'table');
+  const thead = make('thead');
+  const headRow = make('tr');
+  ['用户 (sub)', '名称', 'provider', '类型', '更新时间', ''].forEach(function (h) { headRow.appendChild(make('th', h)); });
+  thead.appendChild(headRow);
+  table.appendChild(thead);
+  const tbody = make('tbody');
+  state.profiles.forEach(function (item) {
+    const row = make('tr');
+    row.appendChild(make('td', item.sub));
+    row.appendChild(make('td', item.name));
+    row.appendChild(make('td', item.provider));
+    row.appendChild(make('td', item.type));
+    row.appendChild(make('td', item.updatedAt ? new Date(item.updatedAt).toLocaleString() : '-'));
+    const actions = make('td');
+    const del = make('button', '删除', 'danger');
+    del.onclick = function () { deleteProfile(item.sub, item.name); };
+    actions.appendChild(del);
+    row.appendChild(actions);
+    tbody.appendChild(row);
+  });
+  table.appendChild(tbody);
+  host.appendChild(table);
+}
+
+async function loadCasdoorUsers() {
+  notice('userHint', '', '');
   try {
-    await request('DELETE', '/v1/admin/user-profiles/' + encodeURIComponent(state.selected) + '/' + encodeURIComponent(target));
-    notice('profileMessage', '已删除 ' + target + '。', 'success');
-    await loadUsers();
-    await selectUser(state.selected);
+    state.casdoorUsers = await request('GET', '/v1/admin/casdoor-users');
+    state.casdoorLoaded = true;
+  } catch (error) {
+    state.casdoorUsers = [];
+    state.casdoorLoaded = false;
+    const handled = handleAdminError(error);
+    if (handled) { notice('userHint', handled + '，可手动输入 sub。', 'warn'); }
+  }
+  renderUserOptions();
+}
+
+function renderUserOptions() {
+  const select = $('userSelect');
+  clear(select);
+  if (state.casdoorUsers.length) {
+    $('userSelectLabel').classList.remove('hidden');
+    $('userManualLabel').classList.add('hidden');
+    state.casdoorUsers.forEach(function (user) {
+      const option = document.createElement('option');
+      option.value = user.sub;
+      const label = (user.displayName || user.name || user.sub) + ' · ' + (user.name || '') + (user.email ? ' · ' + user.email : '');
+      option.textContent = label;
+      select.appendChild(option);
+    });
+  } else {
+    $('userSelectLabel').classList.add('hidden');
+    $('userManualLabel').classList.remove('hidden');
+  }
+}
+
+function selectedSub() {
+  if (state.casdoorUsers.length) { return $('userSelect').value; }
+  return $('userManual').value.trim();
+}
+
+async function applyApiKey() {
+  notice('createMessage', '', '');
+  const sub = selectedSub();
+  const apiKey = $('apiKey').value.trim();
+  if (!sub) { notice('createMessage', '请选择或填写关联用户。', 'warn'); return; }
+  if (!apiKey) { notice('createMessage', '请输入 API Key。', 'warn'); return; }
+  try {
+    await request('POST', '/v1/admin/user-profiles/' + encodeURIComponent(sub), { apiKey: apiKey });
+    $('apiKey').value = '';
+    closeCreate();
+    notice('profileMessage', '已为 ' + sub + ' 保存预留 profile。', 'success');
+    await loadProfiles();
+  } catch (error) {
+    const handled = handleAdminError(error);
+    if (handled) { notice('createMessage', handled, 'error'); }
+  }
+}
+
+function openCreate() {
+  notice('createMessage', '', '');
+  $('createDialog').classList.remove('hidden');
+  updateProviderHint();
+  renderUserOptions();
+  if (!state.casdoorLoaded) { loadCasdoorUsers(); }
+}
+
+function closeCreate() {
+  $('createDialog').classList.add('hidden');
+  notice('createMessage', '', '');
+}
+
+async function deleteProfile(sub, name) {
+  if (!sub || !name) { notice('profileMessage', '缺少用户或 profile 名称。', 'warn'); return; }
+  if (!window.confirm('删除用户 ' + sub + ' 的预留 profile ' + name + '？')) { return; }
+  try {
+    await request('DELETE', '/v1/admin/user-profiles/' + encodeURIComponent(sub) + '/' + encodeURIComponent(name));
+    notice('profileMessage', '已删除 ' + name + '。', 'success');
+    await loadProfiles();
   } catch (error) {
     const handled = handleAdminError(error);
     if (handled) { notice('profileMessage', handled, 'error'); }
@@ -427,15 +472,16 @@ async function deleteProfile(name) {
 $('loginButton').onclick = login;
 $('logoutButton').onclick = logout;
 $('tabOverview').onclick = function () { switchTab('overview'); };
-$('tabUsers').onclick = function () { switchTab('users'); };
+$('tabProfiles').onclick = function () { switchTab('profiles'); };
 $('tabSettings').onclick = function () { switchTab('settings'); };
-$('refreshUsers').onclick = loadUsers;
-$('selectUserButton').onclick = function () {
-  const sub = $('userSub').value.trim();
-  if (sub) { if (!state.users.includes(sub)) { state.users.push(sub); state.users.sort(); renderUsers(); } selectUser(sub); }
-};
+$('refreshProfiles').onclick = loadProfiles;
+$('openCreate').onclick = openCreate;
+$('closeCreate').onclick = closeCreate;
+$('cancelCreate').onclick = closeCreate;
 $('applyApiKey').onclick = applyApiKey;
 $('saveSettings').onclick = saveSettings;
+$('createDialog').addEventListener('click', function (event) { if (event.target === $('createDialog')) { closeCreate(); } });
+document.addEventListener('keydown', function (event) { if (event.key === 'Escape') { closeCreate(); } });
 
 bootstrap();
 </script>

@@ -240,3 +240,41 @@ func (s *userProfileStore) delete(sub, name string) error {
 	}
 	return os.RemoveAll(dir)
 }
+
+// listAll 返回所有用户的预留 profile，并带上所属用户 sub。
+func (s *userProfileStore) listAll() ([]types.AdminAuthProfile, error) {
+	entries, err := os.ReadDir(s.root)
+	if os.IsNotExist(err) {
+		return []types.AdminAuthProfile{}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	result := []types.AdminAuthProfile{}
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		sub := entry.Name()
+		if err := validateSubject(sub); err != nil {
+			continue
+		}
+		items, err := s.list(sub)
+		if err != nil {
+			continue
+		}
+		for _, item := range items {
+			result = append(result, types.AdminAuthProfile{
+				Sub: sub, Name: item.Name, Provider: item.Provider, Type: item.Type,
+				ContentHash: item.ContentHash, UpdatedAt: item.UpdatedAt,
+			})
+		}
+	}
+	sort.Slice(result, func(i, j int) bool {
+		if result[i].Sub != result[j].Sub {
+			return result[i].Sub < result[j].Sub
+		}
+		return result[i].Name < result[j].Name
+	})
+	return result, nil
+}

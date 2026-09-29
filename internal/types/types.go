@@ -25,19 +25,20 @@ type SettingsRequest struct {
 }
 
 type ServerOptions struct {
-	CodexDir          string `json:"codexDir"`
-	Port              int    `json:"port"`
-	AdminJWTIssuer    string `json:"adminJWTIssuer,omitempty"`
-	AdminJWTPublic    string `json:"adminJWTPublic,omitempty"`
-	PortalLoginURL    string `json:"portalLoginURL,omitempty"`
-	AllowTestAuth     bool   `json:"allowTestAuth,omitempty"`
-	CasdoorURL        string `json:"casdoorURL,omitempty"`
-	CasdoorClientID   string `json:"casdoorClientID,omitempty"`
-	CasdoorScopes     string `json:"casdoorScopes,omitempty"`
-	CasdoorAdminClaim string `json:"casdoorAdminClaim,omitempty"`
-	OAuthRedirectURL  string `json:"oauthRedirectURL,omitempty"`
-	UserStoreDir      string `json:"userStoreDir,omitempty"`
-	AdminSubs         string `json:"adminSubs,omitempty"`
+	CodexDir            string `json:"codexDir"`
+	Port                int    `json:"port"`
+	AdminJWTIssuer      string `json:"adminJWTIssuer,omitempty"`
+	AdminJWTPublic      string `json:"adminJWTPublic,omitempty"`
+	PortalLoginURL      string `json:"portalLoginURL,omitempty"`
+	AllowTestAuth       bool   `json:"allowTestAuth,omitempty"`
+	CasdoorURL          string `json:"casdoorURL,omitempty"`
+	CasdoorClientID     string `json:"casdoorClientID,omitempty"`
+	CasdoorScopes       string `json:"casdoorScopes,omitempty"`
+	CasdoorAdminClaim   string `json:"casdoorAdminClaim,omitempty"`
+	CasdoorOrganization string `json:"casdoorOrganization,omitempty"`
+	OAuthRedirectURL    string `json:"oauthRedirectURL,omitempty"`
+	UserStoreDir        string `json:"userStoreDir,omitempty"`
+	AdminSubs           string `json:"adminSubs,omitempty"`
 }
 
 type AdminStatus struct {
@@ -230,6 +231,24 @@ type ReservedSettings struct {
 	BaseURL  string `json:"baseURL"`
 	WireAPI  string `json:"wireAPI"`
 	EnvKey   string `json:"envKey"`
+}
+
+// AdminAuthProfile 是管理页展示的预留 profile，带所属用户 sub。
+type AdminAuthProfile struct {
+	Sub         string    `json:"sub"`
+	Name        string    `json:"name"`
+	Provider    string    `json:"provider"`
+	Type        string    `json:"type"`
+	ContentHash string    `json:"contentHash"`
+	UpdatedAt   time.Time `json:"updatedAt"`
+}
+
+// CasdoorUser 是管理页用于选择关联用户的 Casdoor 用户条目。
+type CasdoorUser struct {
+	Sub         string `json:"sub"`
+	Name        string `json:"name"`
+	DisplayName string `json:"displayName"`
+	Email       string `json:"email"`
 }
 
 type RemoteAuthProfileDetail struct {

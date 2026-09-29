@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -330,4 +332,93 @@ func (s *Server) adminSettings(w http.ResponseWriter, r *http.Request) {
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	}
+}
+
+func (s *Server) adminAllProfiles(w http.ResponseWriter, r *http.Request) {
+	if !s.requireAdmin(w, r) {
+		return
+	}
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	items, err := s.userProfiles.listAll()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, items)
+}
+
+// adminCasdoorUsers 用管理员自己的 Casdoor 令牌代理 Casdoor 的用户列表。
+func (s *Server) adminCasdoorUsers(w http.ResponseWriter, r *http.Request) {
+	if !s.requireAdmin(w, r) {
+		return
+	}
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if strings.TrimSpace(s.options.CasdoorURL) == "" {
+		http.Error(w, "casdoor is not configured", http.StatusServiceUnavailable)
+		return
+	}
+	token := requestBearer(r)
+	if token == "" {
+		http.Error(w, "casdoor token is required", http.StatusUnauthorized)
+		return
+	}
+	organization := strings.TrimSpace(s.options.CasdoorOrganization)
+	if organization == "" {
+		organization = "built-in"
+	}
+	target := strings.TrimRight(s.options.CasdoorURL, "/") + "/api/get-users?owner=" + url.QueryEscape(organization)
+	req, err := http.NewRequest(http.MethodGet, target, nil)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := s.oauthClient.Do(req)
+	if err != nil {
+		http.Error(w, "casdoor is unavailable", http.StatusBadGateway)
+		return
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
+	if resp.StatusCode != http.StatusOK {
+		http.Error(w, "casdoor user list failed: "+resp.Status, http.StatusBadGateway)
+		return
+	}
+	var payload struct {
+		Status string `json:"status"`
+		Msg    string `json:"msg"`
+		Data   []struct {
+			Id          string `json:"id"`
+			Name        string `json:"name"`
+			DisplayName string `json:"displayName"`
+			Email       string `json:"email"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		http.Error(w, "casdoor response is invalid", http.StatusBadGateway)
+		return
+	}
+	if payload.Status != "ok" {
+		message := payload.Msg
+		if message == "" {
+			message = "casdoor rejected the request"
+		}
+		http.Error(w, message, http.StatusBadGateway)
+		return
+	}
+	users := []types.CasdoorUser{}
+	for _, item := range payload.Data {
+		if item.Id == "" {
+			continue
+		}
+		users = append(users, types.CasdoorUser{Sub: item.Id, Name: item.Name, DisplayName: item.DisplayName, Email: item.Email})
+	}
+	sort.Slice(users, func(i, j int) bool { return users[i].Name < users[j].Name })
+	writeJSON(w, users)
 }

@@ -70,6 +70,7 @@ Central Host 通过 Casdoor（默认 `https://id.yprenew.com`）做 OAuth 登录
 -casdoor-client-id   Casdoor 应用 client ID（必填，否则登录接口返回 503）
 -casdoor-scopes      默认 "openid profile"
 -casdoor-admin-claim 判定管理员的 Casdoor token claim，默认 isAdmin
+-casdoor-organization 列出 Casdoor 用户时使用的组织，默认 built-in
 -admin-subs          逗号分隔、始终视为管理员的 Casdoor sub 列表（可选）
 -oauth-redirect-url  Casdoor 中登记的 Redirect URI
 -user-store-dir      默认 ~/.agentpal/server/users
@@ -77,7 +78,7 @@ Central Host 通过 Casdoor（默认 `https://id.yprenew.com`）做 OAuth 登录
 
 管理员可以用管理页 `/agentpal`（点击登录跳转 Casdoor）维护用户预留 profile，也可以直接放目录（格式如下）：
 
-管理页的「系统配置」页统一设置 provider 名称、base_url、wire_api、env_key，用于生成所有用户的预留 profile；「用户」页只需选择用户并录入 API Key（类型固定 `api_key`），保存即按系统配置生成/覆盖该用户的预留 profile，也可留空为未配置的默认值：
+管理页的「系统配置」页统一设置 provider 名称、base_url、wire_api、env_key，用于生成所有用户的预留 profile；「Auth Profiles」页直接列出所有用户的预留 profile（用户 sub 为 Casdoor 用户 id），右上角「新增 / 覆盖」按钮弹出对话框，在其中从 Casdoor 用户下拉列表选择关联用户并录入 API Key（类型固定 `api_key`），保存即按系统配置生成/覆盖该用户的预留 profile。Casdoor 不可用时回退为手动填写 sub。系统配置留空时为未配置的默认值：
 
 ```json
 {
@@ -124,6 +125,8 @@ GET    /v1/admin/users
 GET    /v1/admin/me
 GET    /v1/admin/settings
 PUT    /v1/admin/settings
+GET    /v1/admin/profiles
+GET    /v1/admin/casdoor-users
 GET    /v1/admin/user-profiles/<sub>
 POST   /v1/admin/user-profiles/<sub>
 GET    /v1/admin/user-profiles/<sub>/<name>

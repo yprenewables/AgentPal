@@ -61,6 +61,8 @@ func NewServer(options types.ServerOptions) *Server {
 	mux.HandleFunc("/v1/admin/users", s.adminUsers)
 	mux.HandleFunc("/v1/admin/me", s.adminMe)
 	mux.HandleFunc("/v1/admin/settings", s.adminSettings)
+	mux.HandleFunc("/v1/admin/profiles", s.adminAllProfiles)
+	mux.HandleFunc("/v1/admin/casdoor-users", s.adminCasdoorUsers)
 	mux.HandleFunc("/v1/admin/user-profiles", s.adminProfiles)
 	mux.HandleFunc("/v1/admin/user-profiles/", s.adminProfiles)
 	mux.HandleFunc("/v1/client/device/start", s.deviceStart)
