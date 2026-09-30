@@ -293,10 +293,10 @@ function AuthenticationTabCompact({ profiles, reload, setNotice }: { profiles: A
               <small>{profileSummary(profile)}</small>
               {statusInfo && <small className={`sync-status sync-${statusInfo.level}`}>{statusInfo.text}</small>}
             </div>
-            <div className="profile-actions">
+            <div className="profile-actions inline">
               {needsSync && <IconButton label="Update from server" onClick={() => void overwrite(item.name)}><DownloadIcon /></IconButton>}
               {needsSync && <IconButton label="Keep local copy" onClick={() => dismissItem(item.name)}><CloseIcon /></IconButton>}
-              {profile.active ? <span className="badge success-badge">Current</span> : <button className="secondary compact" onClick={() => void activate(profile.id)}>Use</button>}
+              {profile.active ? <span className="badge success-badge">Current</span> : <IconButton label={`Use ${profile.name}`} onClick={() => void activate(profile.id)}><CheckCircleIcon /></IconButton>}
             </div>
           </article>;
         })}
@@ -317,7 +317,8 @@ function AuthenticationTabCompact({ profiles, reload, setNotice }: { profiles: A
         {localProfiles.map((profile) => <article className={`profile-row ${profile.active ? 'active' : ''}`} key={profile.id}>
           <div className="profile-main"><strong>{profileTitle(profile)}</strong><small>{profileSummary(profile)}</small></div>
           <div className="profile-actions inline">
-            {profile.active ? <span className="badge success-badge">Current</span> : <button className="secondary compact" onClick={() => void activate(profile.id)}>Use</button>}
+            {profile.active && <span className="badge success-badge">Current</span>}
+            {!profile.active && <IconButton label={`Use ${profile.name}`} onClick={() => void activate(profile.id)}><CheckCircleIcon /></IconButton>}
             <div className="more-menu-wrapper">
               <IconButton label="More actions" onClick={(e) => { e?.stopPropagation(); setMenuOpen(menuOpen === profile.id ? null : profile.id); }}><MoreIcon /></IconButton>
               {menuOpen === profile.id && <div className="more-menu">
@@ -402,3 +403,4 @@ function PlusIcon() { return <svg width="16" height="16" fill="currentColor" vie
 function CloseIcon() { return <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M2.146 2.854a.5.5 0 1 1 .708-.708L8 7.293l5.146-5.147a.5.5 0 0 1 .708.708L8.707 8l5.147 5.146a.5.5 0 0 1-.708.708L8 8.707l-5.146 5.147a.5.5 0 0 1-.708-.708L7.293 8 2.146 2.854Z"/></svg>; }
 function DownloadIcon() { return <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/><path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708l3 3z"/></svg>; }
 function MoreIcon() { return <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M3 9.5a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zm5 0a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zm5 0a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3z"/></svg>; }
+function CheckCircleIcon() { return <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z"/><path d="M10.97 4.97a.75.75 0 0 1 1.07 1.05l-3.99 4.99a.75.75 0 0 1-1.08.02L4.324 8.384a.75.75 0 1 1 1.06-1.06l2.094 2.093 3.473-4.425a.267.267 0 0 1 .02-.022z"/></svg>; }
