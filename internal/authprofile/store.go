@@ -142,6 +142,51 @@ func (s *Store) CreateAPIKey(req APIKeyRequest) (AuthProfile, error) {
 	return readSavedProfile(dir)
 }
 
+func (s *Store) UpdateAPIKey(profileID string, req APIKeyRequest) (AuthProfile, error) {
+	if profileID == "" || filepath.Base(profileID) != profileID || profileID == "." || profileID == ".." {
+		return AuthProfile{}, errors.New("invalid profile ID")
+	}
+	if strings.TrimSpace(req.Name) == "" || strings.TrimSpace(req.Provider) == "" {
+		return AuthProfile{}, errors.New("name and provider are required")
+	}
+	dir := filepath.Join(s.Root, profileID)
+	profile, err := readSavedProfile(dir)
+	if err != nil {
+		return AuthProfile{}, err
+	}
+	if profile.Type != "api_key" {
+		return AuthProfile{}, errors.New("only API key profiles can be edited")
+	}
+	authData, err := os.ReadFile(filepath.Join(dir, "auth.json"))
+	if err != nil {
+		return AuthProfile{}, err
+	}
+	var auth map[string]any
+	if err := json.Unmarshal(authData, &auth); err != nil {
+		return AuthProfile{}, err
+	}
+	key := strings.TrimSpace(req.APIKey)
+	if key == "" {
+		key = findAPIKey(auth)
+	}
+	if key == "" {
+		return AuthProfile{}, errors.New("API key is required")
+	}
+	profile.Name = req.Name
+	profile.Provider = req.Provider
+	profile.BaseURL = req.BaseURL
+	profile.UpdatedAt = time.Now().UTC()
+	authData, _ = json.Marshal(map[string]any{"OPENAI_API_KEY": key})
+	config := []byte("model_provider = \"" + req.Provider + "\"\n\n[model_providers." + req.Provider + "]\nname = \"" + req.Provider + "\"\nbase_url = \"" + req.BaseURL + "\"\nenv_key = \"OPENAI_API_KEY\"\nwire_api = \"responses\"\n")
+	if strings.HasPrefix(key, "sk-mem-") {
+		config = append(config, []byte("experimental_bearer_token = \""+key+"\"\n")...)
+	}
+	if err := writeProfile(dir, profile, authData, config); err != nil {
+		return AuthProfile{}, err
+	}
+	return readSavedProfile(dir)
+}
+
 func (s *Store) Delete(profileID string, currentProfileID ...string) error {
 	if profileID == "" || filepath.Base(profileID) != profileID || profileID == "." || profileID == ".." {
 		return errors.New("invalid profile ID")

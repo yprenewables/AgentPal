@@ -9,6 +9,9 @@ import (
 
 type State struct {
 	Subject     string    `json:"subject"`
+	Name        string    `json:"name,omitempty"`
+	DisplayName string    `json:"displayName,omitempty"`
+	Email       string    `json:"email,omitempty"`
 	AccessToken string    `json:"accessToken"`
 	ExpiresAt   time.Time `json:"expiresAt"`
 }

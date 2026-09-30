@@ -3,17 +3,17 @@ package central
 import (
 	"encoding/json"
 	"errors"
-	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
 
 	"agentpal/internal/types"
+	"github.com/pelletier/go-toml/v2"
 )
 
-var envKeyPattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
-var providerPattern = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
+var variablePattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+var placeholderPattern = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)\}`)
 
 type settingsStore struct{ path string }
 
@@ -23,49 +23,62 @@ func newSettingsStore(root string) *settingsStore {
 
 func defaultReservedSettings() types.ReservedSettings {
 	return types.ReservedSettings{
-		Provider: "memory",
-		BaseURL:  "https://memory.yprenewables.com/codex/default",
-		WireAPI:  "responses",
-		EnvKey:   "OPENAI_API_KEY",
+		ProfileTemplate: "model_provider = \"${provider}\"\n\n[model_providers.${provider}]\nname = \"${provider}\"\nbase_url = \"${base_url}\"\nenv_key = \"${env_key}\"\nwire_api = \"${wire_api}\"\n",
+		AuthTemplate:    map[string]any{"${env_key}": "${api_key}"},
+		Variables: []types.TemplateVariable{
+			{Name: "provider", Label: "Provider 名称", Default: "memory", Required: true},
+			{Name: "base_url", Label: "Base URL", Default: "https://memory.yprenewables.com/codex/default", Required: true},
+			{Name: "env_key", Label: "环境变量名", Default: "OPENAI_API_KEY", Required: true},
+			{Name: "wire_api", Label: "Wire API", Default: "responses", Required: true},
+			{Name: "api_key", Label: "API Key", Required: true, Secret: true},
+		},
 	}
 }
 
 func normalizeReservedSettings(settings types.ReservedSettings) types.ReservedSettings {
-	defaults := defaultReservedSettings()
-	settings.Provider = strings.TrimSpace(settings.Provider)
-	settings.BaseURL = strings.TrimSpace(settings.BaseURL)
-	settings.WireAPI = strings.TrimSpace(settings.WireAPI)
-	settings.EnvKey = strings.TrimSpace(settings.EnvKey)
-	if settings.Provider == "" {
-		settings.Provider = defaults.Provider
-	}
-	if settings.BaseURL == "" {
-		settings.BaseURL = defaults.BaseURL
-	}
-	if settings.WireAPI == "" {
-		settings.WireAPI = defaults.WireAPI
-	}
-	if settings.EnvKey == "" {
-		settings.EnvKey = defaults.EnvKey
-	}
+	settings.ProfileTemplate = strings.TrimSpace(settings.ProfileTemplate)
 	return settings
 }
 
 func validateReservedSettings(settings types.ReservedSettings) error {
-	if !providerPattern.MatchString(settings.Provider) {
-		return errors.New("provider must match [A-Za-z0-9_-]")
+	if settings.ProfileTemplate == "" {
+		return errors.New("profileTemplate is required")
 	}
-	parsed, err := url.Parse(settings.BaseURL)
-	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
-		return errors.New("baseURL must be an absolute http(s) URL")
+	if len(settings.AuthTemplate) == 0 {
+		return errors.New("authTemplate is required")
 	}
-	if strings.TrimSpace(settings.WireAPI) == "" {
-		return errors.New("wireAPI is required")
+	testValues := map[string]string{}
+	for _, variable := range settings.Variables {
+		value := variable.Default
+		if value == "" {
+			value = "template_value"
+		}
+		testValues[variable.Name] = value
 	}
-	if !envKeyPattern.MatchString(settings.EnvKey) {
-		return errors.New("envKey must be a valid environment variable name")
+	var config map[string]any
+	if err := toml.Unmarshal([]byte(substituteTemplate(settings.ProfileTemplate, testValues)), &config); err != nil {
+		return errors.New("profileTemplate is invalid TOML: " + err.Error())
+	}
+	seen := map[string]bool{}
+	for _, variable := range settings.Variables {
+		if !variablePattern.MatchString(variable.Name) || seen[variable.Name] {
+			return errors.New("template variable names must be unique and match [A-Za-z_][A-Za-z0-9_]*")
+		}
+		seen[variable.Name] = true
+	}
+	for _, template := range []string{settings.ProfileTemplate, authTemplateText(settings.AuthTemplate)} {
+		for _, match := range placeholderPattern.FindAllStringSubmatch(template, -1) {
+			if !seen[match[1]] {
+				return errors.New("template references undeclared variable: " + match[1])
+			}
+		}
 	}
 	return nil
+}
+
+func authTemplateText(template map[string]any) string {
+	data, _ := json.Marshal(template)
+	return string(data)
 }
 
 func (s *settingsStore) get() (types.ReservedSettings, error) {

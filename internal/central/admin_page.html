@@ -46,11 +46,61 @@
   .login-card { max-width: 460px; margin: 40px auto; text-align: center; }
   .login-card button { margin-top: 12px; }
   .dialog-backdrop { position: fixed; inset: 0; background: rgba(16,24,40,.45); display: flex; align-items: center; justify-content: center; padding: 20px; z-index: 20; }
-  .dialog { background: #fff; border-radius: 12px; padding: 20px; width: 100%; max-width: 520px; box-shadow: 0 20px 50px rgba(16,24,40,.25); }
+  .dialog { background: #fff; border-radius: 12px; padding: 20px; width: 100%; max-width: 900px; box-shadow: 0 20px 50px rgba(16,24,40,.25); }
   .dialog .card-head { margin-bottom: 6px; }
+  .preview-section { margin: 16px 0; border: 1px solid #e6ebf1; border-radius: 8px; background: #fafbfc; }
+  .preview-section summary { padding: 10px 14px; cursor: pointer; font-weight: 600; color: #44506a; user-select: none; }
+  .preview-section summary:hover { background: #f0f3f7; }
+  .preview-section[open] summary { border-bottom: 1px solid #e6ebf1; }
+  .preview-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; padding: 14px; }
+  .preview-item { display: flex; flex-direction: column; }
+  .preview-item label { margin: 0 0 6px 0; font-size: 13px; font-weight: 600; color: #44506a; }
+  .preview-item textarea { font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; padding: 10px; border: 1px solid #d9e0e8; border-radius: 6px; background: #fff; resize: vertical; min-height: 160px; }
+  .preview-item textarea[readonly] { background: #f6f8fa; color: #586069; }
+  .preview-hint { margin: 10px 14px 0; font-size: 12px; color: #8c8c8c; }
+  .preview-hint.edited { color: #d46b08; }
+  .dialog { max-height: calc(100vh - 40px); overflow-y: auto; }
   .icon-button { border: none; background: none; font-size: 20px; line-height: 1; padding: 4px 8px; color: #667385; }
   .icon-button:hover { background: #eef2f7; }
-  @media (max-width: 760px) { .grid, .row { grid-template-columns: 1fr; } .header { flex-direction: column; align-items: flex-start; gap: 8px; } }
+  input:focus, select:focus, textarea:focus { outline: none; border-color: #1677ff; box-shadow: 0 0 0 2px rgba(5,145,255,.12); }
+  button:focus-visible { outline: 2px solid #1677ff; outline-offset: 2px; }
+  .settings-card { padding: 24px 28px; }
+  .settings-intro { margin: 4px 0 24px; max-width: 760px; }
+  .settings-section { border-top: 1px solid #f0f0f0; padding-top: 20px; margin-top: 22px; }
+  .settings-section:first-of-type { border-top: 0; padding-top: 0; margin-top: 0; }
+  .settings-section-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 16px; }
+  .settings-section-head h3 { margin: 0; font-size: 15px; font-weight: 600; }
+  .settings-section-head p { margin: 4px 0 0; font-size: 13px; color: #8c8c8c; }
+  .settings-form { display: grid; gap: 16px; }
+  .settings-field { display: grid; grid-template-columns: 168px minmax(0, 1fr); align-items: start; gap: 16px; margin: 0; }
+  .settings-field > span { padding-top: 8px; color: #262626; font-size: 14px; text-align: right; }
+  .settings-field > span.required::before { content: "*"; color: #ff4d4f; margin-right: 4px; }
+  .settings-control { min-width: 0; }
+  .settings-control input, .settings-control textarea { width: 100%; margin: 0; padding: 8px 11px; border: 1px solid #d9d9d9; border-radius: 6px; color: #262626; transition: border-color .2s, box-shadow .2s; }
+  .settings-control textarea { display: block; resize: vertical; font: 13px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .settings-control small { display: block; color: #8c8c8c; margin-top: 5px; font-size: 12px; }
+  .variable-list { display: grid; gap: 10px; }
+  .variable-row { display: grid; grid-template-columns: minmax(110px, .8fr) minmax(130px, 1fr) minmax(150px, 1.2fr) 96px 86px 64px; align-items: center; gap: 10px; padding: 12px; background: #fafafa; border: 1px solid #f0f0f0; border-radius: 8px; }
+  .variable-row input:not([type="checkbox"]) { width: 100%; min-width: 0; margin: 0; padding: 7px 9px; border: 1px solid #d9d9d9; border-radius: 6px; background: #fff; }
+  .variable-row .check-control { display: flex; align-items: center; gap: 6px; white-space: nowrap; color: #595959; font-size: 13px; }
+  .variable-row input[type="checkbox"] { width: 16px; height: 16px; margin: 0; accent-color: #1677ff; }
+  .variable-row button { padding: 6px 9px; }
+  .variable-header { display: grid; grid-template-columns: minmax(110px, .8fr) minmax(130px, 1fr) minmax(150px, 1.2fr) 96px 86px 64px; gap: 10px; padding: 0 12px; color: #8c8c8c; font-size: 12px; }
+  .settings-actions { display: flex; justify-content: flex-end; border-top: 1px solid #f0f0f0; margin-top: 24px; padding-top: 18px; }
+  button.primary { background: #1677ff; border-color: #1677ff; }
+  button.primary:hover { background: #4096ff; border-color: #4096ff; }
+  @media (max-width: 760px) {
+    .grid, .row { grid-template-columns: 1fr; }
+    .header { flex-direction: column; align-items: flex-start; gap: 8px; }
+    .settings-card { padding: 18px; }
+    .settings-field { grid-template-columns: 1fr; gap: 6px; }
+    .settings-field > span { text-align: left; padding-top: 0; }
+    .variable-header { display: none; }
+    .variable-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .variable-row button { justify-self: start; }
+    .preview-grid { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 420px) { .variable-row { grid-template-columns: 1fr; } .settings-section-head { flex-direction: column; } }
 </style>
 </head>
 <body>
@@ -99,30 +149,76 @@
           <h3>新增 / 覆盖预留 profile</h3>
           <button class="icon-button" id="closeCreate" aria-label="关闭">×</button>
         </div>
-        <p class="muted" id="providerHint">统一 provider：-</p>
-        <p class="muted">选择关联用户并录入 API Key，其余内容（provider、base_url、wire_api、类型 api_key）由系统配置预填。</p>
+        <p class="muted">选择关联用户并填写模板变量。</p>
         <div class="row">
           <label id="userSelectLabel">Casdoor 用户 <select id="userSelect"></select></label>
           <label id="userManualLabel" class="hidden">用户 sub（Casdoor 用户 ID） <input id="userManual" placeholder="user id"></label>
         </div>
         <div id="userHint"></div>
-        <label>API Key <input id="apiKey" type="password" placeholder="sk-..." autocomplete="off"></label>
+        <details class="preview-section" open>
+          <summary>Profile 预览</summary>
+          <p class="preview-hint" id="createPreviewHint"></p>
+          <div class="preview-grid">
+            <div class="preview-item">
+              <label>auth.json（可编辑）</label>
+              <textarea id="createPreviewAuth" rows="8"></textarea>
+            </div>
+            <div class="preview-item">
+              <label>config-auth.toml（可编辑）</label>
+              <textarea id="createPreviewConfig" rows="8"></textarea>
+            </div>
+          </div>
+        </details>
         <div class="button-row"><button class="secondary" id="cancelCreate">取消</button><button class="primary" id="applyApiKey">保存并确认</button></div>
         <div id="createMessage"></div>
       </div>
     </div>
 
-    <div id="settingsPanel" class="hidden">
-      <div class="card">
-        <div class="card-head"><h2>统一 provider 配置</h2></div>
-        <p class="muted">这些参数用于生成所有用户的预留 profile。管理员在「Auth Profiles」页只需录入 API Key。</p>
-        <div class="row">
-          <label>Provider 名称 <input id="sProvider" placeholder="memory"></label>
-          <label>wire_api <input id="sWireAPI" placeholder="responses"></label>
+    <div id="editDialog" class="dialog-backdrop hidden">
+      <div class="dialog">
+        <div class="card-head">
+          <h3>编辑 Profile</h3>
+          <button class="icon-button" id="closeEdit" aria-label="关闭">×</button>
         </div>
-        <label>Base URL <input id="sBaseURL" placeholder="https://memory.yprenewables.com/codex/default"></label>
-        <label>env_key <input id="sEnvKey" placeholder="OPENAI_API_KEY"></label>
-        <div class="button-row"><button class="primary" id="saveSettings">保存配置</button></div>
+        <p class="muted" id="editProfileLabel"></p>
+        <p class="muted">只编辑模板变量；secret 变量留空时保留原值。</p>
+        <div id="editFields"></div>
+        <details class="preview-section" open>
+          <summary>Profile 预览</summary>
+          <p class="preview-hint" id="editPreviewHint"></p>
+          <div class="preview-grid">
+            <div class="preview-item">
+              <label>auth.json（可编辑）</label>
+              <textarea id="editPreviewAuth" rows="8"></textarea>
+            </div>
+            <div class="preview-item">
+              <label>config-auth.toml（可编辑）</label>
+              <textarea id="editPreviewConfig" rows="8"></textarea>
+            </div>
+          </div>
+        </details>
+        <div class="button-row"><button class="secondary" id="cancelEdit">取消</button><button class="primary" id="saveEdit">保存修改</button></div>
+        <div id="editMessage"></div>
+      </div>
+    </div>
+
+    <div id="settingsPanel" class="hidden">
+      <div class="card settings-card">
+        <div class="card-head"><h2>Profile 模板配置</h2></div>
+        <p class="muted settings-intro">使用变量模板生成 Auth Profile。模板中的占位符以 <code>${variable}</code> 表示；变量默认值可在新增或编辑时调整，敏感变量不会回显。</p>
+        <section class="settings-section">
+          <div class="settings-section-head"><div><h3>配置模板</h3><p>分别定义 Codex TOML 片段和认证 JSON 内容。</p></div></div>
+          <div class="settings-form">
+            <label class="settings-field"><span class="required">Config TOML 模板</span><div class="settings-control"><textarea id="sProfileTemplate" rows="8" placeholder='model_provider = "${provider}"'></textarea><small>支持 ${variable} 占位符；保存时会校验渲染后的 TOML。</small></div></label>
+            <label class="settings-field"><span class="required">Auth JSON 模板</span><div class="settings-control"><textarea id="sAuthTemplate" rows="5" placeholder='{"${env_key}":"${api_key}"}'></textarea><small>JSON 对象中的键和值均可使用变量。</small></div></label>
+          </div>
+        </section>
+        <section class="settings-section">
+          <div class="settings-section-head"><div><h3>模板变量</h3><p>变量名用于模板占位符；默认值会预填，required 控制必填，secret 控制密码输入及回显。</p></div><button id="addVariable">＋ 新增变量</button></div>
+          <div class="variable-header"><span>变量名</span><span>表单标签</span><span>默认值</span><span>必填</span><span>敏感信息</span><span></span></div>
+          <div id="variableTable" class="variable-list"></div>
+        </section>
+        <div class="settings-actions"><button class="primary" id="saveSettings">保存配置</button></div>
         <div id="settingsMessage"></div>
       </div>
     </div>
@@ -133,7 +229,7 @@
 const TOKEN_KEY = 'agentpal-admin-token';
 const LOGIN_ID_KEY = 'agentpal-login-id';
 const LOGIN_POLL_KEY = 'agentpal-login-poll';
-const state = { token: '', subject: '', profiles: [], casdoorUsers: [], casdoorLoaded: false, settings: null };
+const state = { token: '', subject: '', profiles: [], casdoorUsers: [], casdoorLoaded: false, settings: null, editingProfile: null };
 
 function $(id) { return document.getElementById(id); }
 function clear(node) { while (node.firstChild) { node.removeChild(node.firstChild); } }
@@ -173,6 +269,81 @@ function handleAdminError(error) {
   return error && error.message ? error.message : String(error);
 }
 
+function substituteTemplate(template, variables) {
+  if (!template) { return ''; }
+  return template.replace(/\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g, function (match, name) {
+    return variables[name] !== undefined ? variables[name] : match;
+  });
+}
+
+const KEEP_SECRET_MARK = '<保留当前值>';
+
+function renderTemplateValue(value, variables) {
+  if (typeof value === 'string') { return substituteTemplate(value, variables); }
+  if (Array.isArray(value)) { return value.map(function (item) { return renderTemplateValue(item, variables); }); }
+  if (value && typeof value === 'object') {
+    const result = {};
+    Object.keys(value).forEach(function (key) { result[substituteTemplate(key, variables)] = renderTemplateValue(value[key], variables); });
+    return result;
+  }
+  return value;
+}
+
+// 与后端 resolveTemplateValues 一致：未提交的变量取默认值；编辑时留空的敏感变量显示保留标记。
+function previewValues(dialogId, editing) {
+  const values = {};
+  document.querySelectorAll('#' + dialogId + ' [data-variable]').forEach(function (input) { values[input.dataset.variable] = input.value.trim(); });
+  (state.settings && state.settings.variables || []).forEach(function (variable) {
+    if (values[variable.name] === undefined) { values[variable.name] = variable.default || ''; }
+    if (editing && variable.secret && values[variable.name] === '') { values[variable.name] = KEEP_SECRET_MARK; }
+  });
+  return values;
+}
+
+function renderPreview(dialogId, prefix, editing) {
+  if (!state.settings) { return; }
+  const values = previewValues(dialogId, editing);
+  const authElem = $(prefix + 'Auth');
+  const configElem = $(prefix + 'Config');
+  authElem.value = JSON.stringify(renderTemplateValue(state.settings.authTemplate || {}, values), null, 2);
+  configElem.value = substituteTemplate(state.settings.profileTemplate || '', values);
+  delete authElem.dataset.userEdited;
+  delete configElem.dataset.userEdited;
+  setPreviewHint(prefix, false);
+}
+
+function setPreviewHint(prefix, edited) {
+  $(prefix + 'Hint').textContent = edited ? '已手动修改：保存时以编辑框内容为准；再次修改变量会重新生成并覆盖手动修改。' : '由模板和变量生成。可直接修改 auth.json 与 config-auth.toml；修改变量会重新生成并覆盖手动修改。';
+  $(prefix + 'Hint').classList.toggle('edited', edited);
+}
+
+function markPreviewEdited(event) {
+  event.target.dataset.userEdited = 'true';
+  setPreviewHint(event.target.dataset.prefix, true);
+}
+
+function updateCreatePreview() { renderPreview('createDialog', 'createPreview', false); }
+function updateEditPreview() { renderPreview('editDialog', 'editPreview', true); }
+
+// 收集手动修改的内容；校验失败返回 null 并提示。
+function collectOverrides(prefix, messageId) {
+  const body = {};
+  const authElem = $(prefix + 'Auth');
+  const configElem = $(prefix + 'Config');
+  if (authElem.dataset.userEdited === 'true') {
+    let parsed;
+    try { parsed = JSON.parse(authElem.value); } catch (e) { notice(messageId, 'auth.json 格式错误：' + e.message, 'error'); return null; }
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) { notice(messageId, 'auth.json 必须是 JSON 对象。', 'error'); return null; }
+    if (authElem.value.indexOf(KEEP_SECRET_MARK) !== -1) { notice(messageId, '手动修改 auth.json 时请填写实际值，不能保留「' + KEEP_SECRET_MARK + '」。', 'error'); return null; }
+    body.authOverride = parsed;
+  }
+  if (configElem.dataset.userEdited === 'true') {
+    if (configElem.value.indexOf(KEEP_SECRET_MARK) !== -1) { notice(messageId, '手动修改 config-auth.toml 时请填写实际值，不能保留「' + KEEP_SECRET_MARK + '」。', 'error'); return null; }
+    body.configOverride = configElem.value;
+  }
+  return body;
+}
+
 function showLogin(message) {
   $('appView').classList.add('hidden');
   $('loginView').classList.remove('hidden');
@@ -183,8 +354,9 @@ function showLogin(message) {
 function showApp() {
   $('loginView').classList.add('hidden');
   $('appView').classList.remove('hidden');
-  $('session').textContent = state.subject ? ('已登录：' + state.subject) : '';
+  $('session').textContent = state.displayName || state.name || (state.subject ? ('已登录：' + state.subject) : '');
   closeCreate();
+  closeEdit();
   loadStatus();
   loadSettings();
   switchTab('overview');
@@ -315,20 +487,13 @@ async function loadStatus() {
   }
 }
 
-function updateProviderHint() {
-  const settings = state.settings || {};
-  $('providerHint').textContent = '统一 provider：' + (settings.provider || '-') + '，base_url：' + (settings.baseURL || '-') + '，类型：api_key';
-}
-
 async function loadSettings() {
   notice('settingsMessage', '', '');
   try {
     state.settings = await request('GET', '/v1/admin/settings');
-    $('sProvider').value = state.settings.provider || '';
-    $('sBaseURL').value = state.settings.baseURL || '';
-    $('sWireAPI').value = state.settings.wireAPI || '';
-    $('sEnvKey').value = state.settings.envKey || '';
-    updateProviderHint();
+    $('sProfileTemplate').value = state.settings.profileTemplate || '';
+    $('sAuthTemplate').value = JSON.stringify(state.settings.authTemplate || {}, null, 2);
+    renderVariables();
   } catch (error) {
     const handled = handleAdminError(error);
     if (handled) { notice('settingsMessage', handled, 'error'); }
@@ -337,15 +502,45 @@ async function loadSettings() {
 
 async function saveSettings() {
   notice('settingsMessage', '', '');
-  const body = { provider: $('sProvider').value.trim(), baseURL: $('sBaseURL').value.trim(), wireAPI: $('sWireAPI').value.trim(), envKey: $('sEnvKey').value.trim() };
+  let authTemplate;
+  try { authTemplate = JSON.parse($('sAuthTemplate').value); } catch { notice('settingsMessage', 'Auth JSON 模板格式无效。', 'error'); return; }
+  const body = { profileTemplate: $('sProfileTemplate').value, authTemplate: authTemplate, variables: readVariables() };
   try {
     state.settings = await request('PUT', '/v1/admin/settings', body);
-    updateProviderHint();
+    renderVariables();
     notice('settingsMessage', '已保存系统配置。', 'success');
   } catch (error) {
     const handled = handleAdminError(error);
     if (handled) { notice('settingsMessage', handled, 'error'); }
   }
+}
+
+function renderVariables() {
+  const host = $('variableTable');
+  clear(host);
+  (state.settings && state.settings.variables || []).forEach(function (variable, index) {
+    const row = make('div', undefined, 'row variable-row');
+    row.innerHTML = '<input data-field="name" placeholder="variable_name"> <input data-field="label" placeholder="显示名称"> <input data-field="default" placeholder="可选默认值"> <label class="check-control"><input data-field="required" type="checkbox"> 必填</label> <label class="check-control"><input data-field="secret" type="checkbox"> 敏感</label> <button type="button" class="danger">删除</button>';
+    row.querySelector('[data-field="name"]').value = variable.name || '';
+    row.querySelector('[data-field="label"]').value = variable.label || '';
+    row.querySelector('[data-field="default"]').value = variable.default || '';
+    row.querySelector('[data-field="required"]').checked = !!variable.required;
+    row.querySelector('[data-field="secret"]').checked = !!variable.secret;
+    row.querySelector('button').onclick = function () { state.settings.variables.splice(index, 1); renderVariables(); };
+    host.appendChild(row);
+  });
+}
+
+function readVariables() {
+  return Array.from(document.querySelectorAll('.variable-row')).map(function (row) {
+    return {
+      name: row.querySelector('[data-field="name"]').value.trim(),
+      label: row.querySelector('[data-field="label"]').value.trim(),
+      default: row.querySelector('[data-field="default"]').value,
+      required: row.querySelector('[data-field="required"]').checked,
+      secret: row.querySelector('[data-field="secret"]').checked
+    };
+  });
 }
 
 async function loadProfiles() {
@@ -365,18 +560,21 @@ function renderProfilesTable() {
   const table = make('table', undefined, 'table');
   const thead = make('thead');
   const headRow = make('tr');
-  ['用户 (sub)', '名称', 'provider', '类型', '更新时间', ''].forEach(function (h) { headRow.appendChild(make('th', h)); });
+  ['用户', '名称', 'provider', '类型', '更新时间', ''].forEach(function (h) { headRow.appendChild(make('th', h)); });
   thead.appendChild(headRow);
   table.appendChild(thead);
   const tbody = make('tbody');
   state.profiles.forEach(function (item) {
     const row = make('tr');
-    row.appendChild(make('td', item.sub));
+    row.appendChild(make('td', getCasdoorUserLabel(item.sub)));
     row.appendChild(make('td', item.name));
     row.appendChild(make('td', item.provider));
     row.appendChild(make('td', item.type));
     row.appendChild(make('td', item.updatedAt ? new Date(item.updatedAt).toLocaleString() : '-'));
     const actions = make('td');
+    const edit = make('button', '编辑');
+    edit.onclick = function () { openEdit(item.sub, item.name); };
+    actions.appendChild(edit);
     const del = make('button', '删除', 'danger');
     del.onclick = function () { deleteProfile(item.sub, item.name); };
     actions.appendChild(del);
@@ -392,6 +590,8 @@ async function loadCasdoorUsers() {
   try {
     state.casdoorUsers = await request('GET', '/v1/admin/casdoor-users');
     state.casdoorLoaded = true;
+    renderProfilesTable();
+    if (state.editingProfile) { $('editProfileLabel').textContent = '用户：' + getCasdoorUserLabel(state.editingProfile.sub) + ' · Profile：' + state.editingProfile.name; }
   } catch (error) {
     state.casdoorUsers = [];
     state.casdoorLoaded = false;
@@ -428,12 +628,15 @@ function selectedSub() {
 async function applyApiKey() {
   notice('createMessage', '', '');
   const sub = selectedSub();
-  const apiKey = $('apiKey').value.trim();
+  const variables = {};
+  document.querySelectorAll('#createDialog [data-variable]').forEach(function (input) { variables[input.dataset.variable] = input.value; });
   if (!sub) { notice('createMessage', '请选择或填写关联用户。', 'warn'); return; }
-  if (!apiKey) { notice('createMessage', '请输入 API Key。', 'warn'); return; }
+  if (!Object.keys(variables).length) { notice('createMessage', '请填写变量。', 'warn'); return; }
+  const body = collectOverrides('createPreview', 'createMessage');
+  if (!body) { return; }
+  body.variables = variables;
   try {
-    await request('POST', '/v1/admin/user-profiles/' + encodeURIComponent(sub), { apiKey: apiKey });
-    $('apiKey').value = '';
+    await request('POST', '/v1/admin/user-profiles/' + encodeURIComponent(sub), body);
     closeCreate();
     notice('profileMessage', '已为 ' + sub + ' 保存预留 profile。', 'success');
     await loadProfiles();
@@ -446,14 +649,98 @@ async function applyApiKey() {
 function openCreate() {
   notice('createMessage', '', '');
   $('createDialog').classList.remove('hidden');
-  updateProviderHint();
   renderUserOptions();
+  renderCreateVariables();
   if (!state.casdoorLoaded) { loadCasdoorUsers(); }
+}
+
+function renderCreateVariables() {
+  const oldFields = $('createDialog').querySelector('.template-fields');
+  if (oldFields) { oldFields.remove(); }
+  const fields = make('div', undefined, 'template-fields');
+  (state.settings && state.settings.variables || []).forEach(function (variable) {
+    const label = make('label', variable.label || variable.name);
+    const input = document.createElement('input');
+    input.dataset.variable = variable.name;
+    input.type = variable.secret ? 'password' : 'text';
+    input.value = variable.default || '';
+    input.placeholder = variable.required ? '必填' : '可选';
+    input.addEventListener('input', updateCreatePreview);
+    label.appendChild(input);
+    fields.appendChild(label);
+  });
+  $('userHint').after(fields);
+  updateCreatePreview();
 }
 
 function closeCreate() {
   $('createDialog').classList.add('hidden');
   notice('createMessage', '', '');
+}
+
+function getCasdoorUserLabel(sub) {
+  if (!sub) { return ''; }
+  const user = (state.casdoorUsers || []).find(function (u) { return u.sub === sub; });
+  if (!user) { return sub; }
+  const name = user.displayName || user.name || user.sub;
+  const detail = user.name && user.displayName !== user.name ? ' (' + user.name + ')' : '';
+  return name + detail;
+}
+
+async function openEdit(sub, name) {
+  notice('editMessage', '', '');
+  state.editingProfile = { sub: sub, name: name };
+  $('editProfileLabel').textContent = '用户：' + getCasdoorUserLabel(sub) + ' · Profile：' + name;
+  clear($('editFields'));
+  $('editDialog').classList.remove('hidden');
+  if (!state.casdoorLoaded) { loadCasdoorUsers(); }
+  try {
+    const detail = await request('GET', '/v1/admin/user-profiles/' + encodeURIComponent(sub) + '/' + encodeURIComponent(name));
+    state.editingProfile.detail = detail;
+    (state.settings && state.settings.variables || []).forEach(function (variable) {
+      const label = make('label', variable.label || variable.name);
+      const input = document.createElement('input');
+      input.dataset.variable = variable.name;
+      input.type = variable.secret ? 'password' : 'text';
+      input.value = variable.secret ? '' : (detail.variables && detail.variables[variable.name] !== undefined ? detail.variables[variable.name] : (variable.name === 'provider' ? detail.provider : variable.default || ''));
+      input.placeholder = variable.secret ? '留空保留当前值' : (variable.required ? '必填' : '可选');
+      input.addEventListener('input', updateEditPreview);
+      label.appendChild(input);
+      $('editFields').appendChild(label);
+    });
+    updateEditPreview();
+  } catch (error) {
+    const handled = handleAdminError(error);
+    if (handled) { notice('editMessage', handled, 'error'); }
+  }
+}
+
+function closeEdit() {
+  $('editDialog').classList.add('hidden');
+  clear($('editFields'));
+  state.editingProfile = null;
+  notice('editMessage', '', '');
+}
+
+async function saveEdit() {
+  notice('editMessage', '', '');
+  const editing = state.editingProfile;
+  if (!editing || !editing.detail) { notice('editMessage', 'profile 详情尚未加载，请重试。', 'warn'); return; }
+  const variables = {};
+  document.querySelectorAll('#editFields [data-variable]').forEach(function (input) { variables[input.dataset.variable] = input.value; });
+  if (!Object.keys(variables).length) { variables.api_key = ''; }
+  const body = collectOverrides('editPreview', 'editMessage');
+  if (!body) { return; }
+  body.variables = variables;
+  try {
+    await request('POST', '/v1/admin/user-profiles/' + encodeURIComponent(editing.sub) + '/' + encodeURIComponent(editing.name), body);
+    closeEdit();
+    notice('profileMessage', '已更新 ' + editing.name + '。', 'success');
+    await loadProfiles();
+  } catch (error) {
+    const handled = handleAdminError(error);
+    if (handled) { notice('editMessage', handled, 'error'); }
+  }
 }
 
 async function deleteProfile(sub, name) {
@@ -476,12 +763,21 @@ $('tabProfiles').onclick = function () { switchTab('profiles'); };
 $('tabSettings').onclick = function () { switchTab('settings'); };
 $('refreshProfiles').onclick = loadProfiles;
 $('openCreate').onclick = openCreate;
+$('addVariable').onclick = function () { if (!state.settings) { return; } state.settings.variables = state.settings.variables || []; state.settings.variables.push({ name: '', label: '', default: '', required: false, secret: false }); renderVariables(); };
 $('closeCreate').onclick = closeCreate;
 $('cancelCreate').onclick = closeCreate;
 $('applyApiKey').onclick = applyApiKey;
+$('closeEdit').onclick = closeEdit;
+$('cancelEdit').onclick = closeEdit;
+$('saveEdit').onclick = saveEdit;
 $('saveSettings').onclick = saveSettings;
+['createPreviewAuth', 'createPreviewConfig', 'editPreviewAuth', 'editPreviewConfig'].forEach(function (id) {
+  $(id).dataset.prefix = id.indexOf('create') === 0 ? 'createPreview' : 'editPreview';
+  $(id).addEventListener('input', markPreviewEdited);
+});
 $('createDialog').addEventListener('click', function (event) { if (event.target === $('createDialog')) { closeCreate(); } });
-document.addEventListener('keydown', function (event) { if (event.key === 'Escape') { closeCreate(); } });
+$('editDialog').addEventListener('click', function (event) { if (event.target === $('editDialog')) { closeEdit(); } });
+document.addEventListener('keydown', function (event) { if (event.key === 'Escape') { closeCreate(); closeEdit(); } });
 
 bootstrap();
 </script>

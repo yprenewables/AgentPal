@@ -255,6 +255,11 @@ func (a *App) CreateAPIKeyProfile(req types.APIKeyProfileRequest) (types.AuthPro
 	p, err := authprofile.NewStore(root).CreateAPIKey(authprofile.APIKeyRequest{Name: req.Name, Provider: req.Provider, BaseURL: req.BaseURL, APIKey: req.APIKey})
 	return profileType(p), err
 }
+func (a *App) UpdateAPIKeyProfile(id string, req types.APIKeyProfileRequest) (types.AuthProfile, error) {
+	root, _ := codex.ExpandPath("~/.agentpal/auth-profiles")
+	p, err := authprofile.NewStore(root).UpdateAPIKey(id, authprofile.APIKeyRequest{Name: req.Name, Provider: req.Provider, BaseURL: req.BaseURL, APIKey: req.APIKey})
+	return profileType(p), err
+}
 func (a *App) ActivateAuthProfile(id string) (types.ProfileSwitchResult, error) {
 	state, err := appconfig.ReadState()
 	if err != nil {
@@ -505,7 +510,7 @@ func (a *App) PollCentralLogin(loginID, pollToken string) (types.LoginStatus, er
 		if status.ExpiresIn > 0 {
 			expires = time.Now().Add(time.Duration(status.ExpiresIn) * time.Second)
 		}
-		if err := login.Write(root, login.State{Subject: status.Subject, AccessToken: status.AccessToken, ExpiresAt: expires}); err != nil {
+		if err := login.Write(root, login.State{Subject: status.Subject, Name: status.Name, DisplayName: status.DisplayName, Email: status.Email, AccessToken: status.AccessToken, ExpiresAt: expires}); err != nil {
 			return types.LoginStatus{}, err
 		}
 	}
@@ -524,7 +529,7 @@ func (a *App) GetCentralLoginState() (types.CentralLoginState, error) {
 	if state.AccessToken == "" || time.Now().After(state.ExpiresAt) {
 		return types.CentralLoginState{LoggedIn: false}, nil
 	}
-	return types.CentralLoginState{LoggedIn: true, Subject: state.Subject, ExpiresAt: state.ExpiresAt}, nil
+	return types.CentralLoginState{LoggedIn: true, Subject: state.Subject, Name: state.Name, DisplayName: state.DisplayName, Email: state.Email, ExpiresAt: state.ExpiresAt}, nil
 }
 
 func (a *App) LogoutCentralLogin() error {

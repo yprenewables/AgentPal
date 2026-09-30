@@ -39,6 +39,25 @@ func ParseJWTSubject(token string) (string, error) {
 	return subject, nil
 }
 
+// ParseJWTUserInfo 解析 JWT payload 中的用户信息（sub, name, displayName, email）。
+func ParseJWTUserInfo(token string) (sub, name, displayName, email string, err error) {
+	payload, err := ParseJWTClaims(token)
+	if err != nil {
+		return "", "", "", "", err
+	}
+	sub, _ = payload["sub"].(string)
+	if err := validateSubject(sub); err != nil {
+		return "", "", "", "", err
+	}
+	name, _ = payload["name"].(string)
+	displayName, _ = payload["displayName"].(string)
+	if displayName == "" {
+		displayName, _ = payload["preferred_username"].(string)
+	}
+	email, _ = payload["email"].(string)
+	return sub, name, displayName, email, nil
+}
+
 // requestBearer 从 Authorization 头或 access_token Cookie 读取令牌。
 func requestBearer(r *http.Request) string {
 	token := strings.TrimSpace(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "))

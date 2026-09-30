@@ -227,10 +227,17 @@ type RemoteAuthProfile struct {
 
 // ReservedSettings 是中心侧统一生成预留 profile 所用的参数。
 type ReservedSettings struct {
-	Provider string `json:"provider"`
-	BaseURL  string `json:"baseURL"`
-	WireAPI  string `json:"wireAPI"`
-	EnvKey   string `json:"envKey"`
+	ProfileTemplate string             `json:"profileTemplate,omitempty"`
+	AuthTemplate    map[string]any     `json:"authTemplate,omitempty"`
+	Variables       []TemplateVariable `json:"variables,omitempty"`
+}
+
+type TemplateVariable struct {
+	Name     string `json:"name"`
+	Label    string `json:"label"`
+	Default  string `json:"default,omitempty"`
+	Required bool   `json:"required"`
+	Secret   bool   `json:"secret"`
 }
 
 // AdminAuthProfile 是管理页展示的预留 profile，带所属用户 sub。
@@ -252,13 +259,14 @@ type CasdoorUser struct {
 }
 
 type RemoteAuthProfileDetail struct {
-	Name           string         `json:"name"`
-	Provider       string         `json:"provider"`
-	Type           string         `json:"type"`
-	ContentHash    string         `json:"contentHash"`
-	UpdatedAt      time.Time      `json:"updatedAt"`
-	Auth           map[string]any `json:"auth"`
-	ConfigAuthToml string         `json:"configAuthToml"`
+	Name           string            `json:"name"`
+	Provider       string            `json:"provider"`
+	Type           string            `json:"type"`
+	ContentHash    string            `json:"contentHash"`
+	UpdatedAt      time.Time         `json:"updatedAt"`
+	Auth           map[string]any    `json:"auth"`
+	ConfigAuthToml string            `json:"configAuthToml"`
+	Variables      map[string]string `json:"variables,omitempty"`
 }
 
 type LoginStart struct {
@@ -271,15 +279,21 @@ type LoginStart struct {
 type LoginStatus struct {
 	Status      string `json:"status"`
 	Subject     string `json:"subject,omitempty"`
+	Name        string `json:"name,omitempty"`
+	DisplayName string `json:"displayName,omitempty"`
+	Email       string `json:"email,omitempty"`
 	AccessToken string `json:"accessToken,omitempty"`
 	ExpiresIn   int    `json:"expiresIn,omitempty"`
 	Error       string `json:"error,omitempty"`
 }
 
 type CentralLoginState struct {
-	LoggedIn  bool      `json:"loggedIn"`
-	Subject   string    `json:"subject,omitempty"`
-	ExpiresAt time.Time `json:"expiresAt,omitempty"`
+	LoggedIn    bool      `json:"loggedIn"`
+	Subject     string    `json:"subject,omitempty"`
+	Name        string    `json:"name,omitempty"`
+	DisplayName string    `json:"displayName,omitempty"`
+	Email       string    `json:"email,omitempty"`
+	ExpiresAt   time.Time `json:"expiresAt,omitempty"`
 }
 
 type AuthSyncItem struct {

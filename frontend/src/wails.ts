@@ -12,8 +12,8 @@ export type UpdateInfo = { currentVersion: string; latestVersion: string; hasUpd
 export type APIKeyProfileRequest = { name: string; provider: string; baseUrl: string; apiKey: string };
 export type SettingsRequest = { mode: 'client' | 'server'; codexDir: string; centralHost: string; centralPort: number; port: number; deviceName: string; backupDir: string };
 export type LoginStart = { loginId: string; pollToken: string; authorizeUrl: string; expiresAt: string };
-export type LoginStatus = { status: 'pending' | 'approved' | 'failed'; subject?: string; accessToken?: string; expiresIn?: number; error?: string };
-export type CentralLoginState = { loggedIn: boolean; subject?: string; expiresAt?: string };
+export type LoginStatus = { status: 'pending' | 'approved' | 'failed'; subject?: string; name?: string; displayName?: string; email?: string; accessToken?: string; expiresIn?: number; error?: string };
+export type CentralLoginState = { loggedIn: boolean; subject?: string; name?: string; displayName?: string; email?: string; expiresAt?: string };
 export type AuthSyncItem = { name: string; status: 'added' | 'synced' | 'needs_sync' | 'error'; detail?: string };
 export type AuthSyncReport = { items: AuthSyncItem[] };
 
@@ -27,6 +27,7 @@ type Backend = { App: {
   ImportCurrentAuth(name: string): Promise<AuthProfile>;
   ImportCurrentAPIKey(name: string): Promise<AuthProfile>;
   CreateAPIKeyProfile(request: APIKeyProfileRequest): Promise<AuthProfile>;
+  UpdateAPIKeyProfile(id: string, request: APIKeyProfileRequest): Promise<AuthProfile>;
   ActivateAuthProfile(id: string): Promise<ProfileSwitchResult>;
   PreviewAuthProfile(id: string): Promise<ProfileSwitchPreview>;
   ActivateAuthProfileWithConflict(id: string, allowProviderConflict: boolean): Promise<ProfileSwitchResult>;

@@ -96,6 +96,32 @@ func TestStoreRejectsInvalidAPIKeyProfile(t *testing.T) {
 	}
 }
 
+func TestStoreUpdatesAPIKeyProfileAndKeepsKeyWhenOmitted(t *testing.T) {
+	store := NewStore(t.TempDir())
+	profile, err := store.CreateAPIKey(APIKeyRequest{Name: "Work", Provider: "openai", BaseURL: "https://api.openai.com/v1", APIKey: "sk-original"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	updated, err := store.UpdateAPIKey(profile.ID, APIKeyRequest{Name: "Personal", Provider: "corp", BaseURL: "https://models.example/v1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.ID != profile.ID || updated.Name != "Personal" || updated.Provider != "corp" || updated.BaseURL != "https://models.example/v1" {
+		t.Fatalf("profile metadata was not updated: %#v", updated)
+	}
+	if updated.APIKeyPreview != maskAPIKey("sk-original") {
+		t.Fatalf("existing API key was not preserved: %q", updated.APIKeyPreview)
+	}
+
+	updated, err = store.UpdateAPIKey(profile.ID, APIKeyRequest{Name: "Personal", Provider: "corp", BaseURL: "https://models.example/v1", APIKey: "sk-new"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.APIKeyPreview != maskAPIKey("sk-new") {
+		t.Fatalf("API key was not replaced: %q", updated.APIKeyPreview)
+	}
+}
+
 func TestStoreDeleteRemovesInactiveProfile(t *testing.T) {
 	store := NewStore(t.TempDir())
 	profile, err := store.CreateAPIKey(APIKeyRequest{Name: "Remove", Provider: "openai", BaseURL: "https://api.openai.com/v1", APIKey: "sk-test"})

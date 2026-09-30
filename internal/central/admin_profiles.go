@@ -6,20 +6,17 @@ import (
 	"net/http"
 	"net/url"
 	"sort"
-	"strconv"
 	"strings"
 
 	"agentpal/internal/authprofile"
 	"agentpal/internal/types"
-
 	"github.com/pelletier/go-toml/v2"
 )
 
 type adminProfileRequest struct {
-	Type           string         `json:"type"`
-	Provider       string         `json:"provider"`
-	Auth           map[string]any `json:"auth"`
-	ConfigAuthToml string         `json:"configAuthToml"`
+	Variables      map[string]string `json:"variables"`
+	AuthOverride   json.RawMessage   `json:"authOverride,omitempty"`
+	ConfigOverride string            `json:"configOverride,omitempty"`
 }
 
 // adminSubject 返回发起请求的管理员 subject。
@@ -109,6 +106,21 @@ func (s *Server) adminMe(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+	token := requestBearer(r)
+	if token != "" {
+		sub, name, displayName, email, err := ParseJWTUserInfo(token)
+		if err == nil && sub != "" {
+			subject, status, message := s.adminSubject(r)
+			if status == 0 && subject == sub {
+				writeJSON(w, map[string]any{"subject": sub, "name": name, "displayName": displayName, "email": email, "admin": true})
+				return
+			}
+			if status != 0 {
+				http.Error(w, message, status)
+				return
+			}
+		}
+	}
 	subject, status, message := s.adminSubject(r)
 	if status != 0 {
 		http.Error(w, message, status)
@@ -191,6 +203,11 @@ func (s *Server) adminProfiles(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) adminProfileSave(w http.ResponseWriter, r *http.Request, sub, name string) {
+	settings, err := s.settings.get()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 	if err := authprofile.ValidateReservedName(name); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -205,60 +222,82 @@ func (s *Server) adminProfileSave(w http.ResponseWriter, r *http.Request, sub, n
 		http.Error(w, "invalid request body", http.StatusBadRequest)
 		return
 	}
-	if req.Type == "" || req.Provider == "" {
-		http.Error(w, "type and provider are required", http.StatusBadRequest)
-		return
+	var existing map[string]any
+	var existingVariables map[string]string
+	if current, readErr := s.userProfiles.read(sub, name); readErr == nil {
+		_ = json.Unmarshal(current.AuthJSON, &existing)
+		existingVariables = current.Meta.Variables
 	}
-	if req.Auth == nil {
-		http.Error(w, "auth must be a JSON object", http.StatusBadRequest)
-		return
+	if existingVariables != nil {
+		if req.Variables == nil {
+			req.Variables = map[string]string{}
+		}
+		for _, variable := range settings.Variables {
+			if !variable.Secret {
+				continue
+			}
+			if value, ok := existingVariables[variable.Name]; ok {
+				if _, submitted := req.Variables[variable.Name]; !submitted || strings.TrimSpace(req.Variables[variable.Name]) == "" {
+					req.Variables[variable.Name] = value
+				}
+			}
+		}
 	}
-	var config map[string]any
-	if err := toml.Unmarshal([]byte(req.ConfigAuthToml), &config); err != nil {
-		http.Error(w, "configAuthToml is invalid: "+err.Error(), http.StatusBadRequest)
-		return
+	if req.Variables == nil {
+		req.Variables = map[string]string{}
 	}
-	if provider, _ := config["model_provider"].(string); provider != name {
-		http.Error(w, "configAuthToml model_provider must equal the profile name", http.StatusBadRequest)
-		return
-	}
-	authJSON, err := json.Marshal(req.Auth)
+	rendered, err := renderReservedProfile(settings, req.Variables, existing)
 	if err != nil {
-		http.Error(w, "auth is invalid", http.StatusBadRequest)
-		return
-	}
-	meta := reservedMeta{Name: name, Type: req.Type, Provider: req.Provider}
-	if err := s.userProfiles.write(sub, name, meta, authJSON, []byte(req.ConfigAuthToml)); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	profile, err := s.userProfiles.read(sub, name)
+	if rendered.Name != name {
+		http.Error(w, "profile_name cannot change an existing profile", http.StatusBadRequest)
+		return
+	}
+	authJSON := rendered.AuthJSON
+	configTOML := rendered.ConfigTOML
+	if len(req.AuthOverride) > 0 {
+		var testAuth map[string]any
+		if err := json.Unmarshal(req.AuthOverride, &testAuth); err != nil {
+			http.Error(w, "authOverride is not valid JSON: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+		authJSON = req.AuthOverride
+	}
+	if strings.TrimSpace(req.ConfigOverride) != "" {
+		var testConfig map[string]any
+		if err := toml.Unmarshal([]byte(req.ConfigOverride), &testConfig); err != nil {
+			http.Error(w, "configOverride is not valid TOML: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+		configTOML = []byte(req.ConfigOverride)
+	}
+	meta := reservedMeta{Name: rendered.Name, Type: rendered.Type, Provider: rendered.Provider, Variables: nonSecretVariables(settings, req.Variables)}
+	if err := s.userProfiles.write(sub, name, meta, authJSON, configTOML); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	saved, err := s.userProfiles.read(sub, name)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	writeJSON(w, profileDetail(profile))
+	writeJSON(w, profileDetail(saved))
 }
 
-func buildReservedProfile(settings types.ReservedSettings, apiKey string) authprofile.CentralProfile {
-	quote := strconv.Quote
-	config := "model_provider = " + quote(settings.Provider) + "\n\n" +
-		"[model_providers." + settings.Provider + "]\n" +
-		"name = " + quote(settings.Provider) + "\n" +
-		"base_url = " + quote(settings.BaseURL) + "\n" +
-		"env_key = " + quote(settings.EnvKey) + "\n" +
-		"wire_api = " + quote(settings.WireAPI) + "\n"
-	if strings.HasPrefix(apiKey, "sk-mem-") {
-		config += "experimental_bearer_token = " + quote(apiKey) + "\n"
+func nonSecretVariables(settings types.ReservedSettings, values map[string]string) map[string]string {
+	result := map[string]string{}
+	for _, variable := range settings.Variables {
+		if !variable.Secret {
+			if value, ok := values[variable.Name]; ok {
+				result[variable.Name] = value
+			}
+		}
 	}
-	authJSON, _ := json.Marshal(map[string]string{settings.EnvKey: apiKey})
-	return authprofile.CentralProfile{
-		Name: settings.Provider, Provider: settings.Provider, Type: "api_key",
-		AuthJSON: authJSON, ConfigTOML: []byte(config),
-	}
+	return result
 }
 
-// adminApplyReserved 用系统配置里的统一参数为用户生成预留 profile，管理员只需提供 api_key。
 func (s *Server) adminApplyReserved(w http.ResponseWriter, r *http.Request, sub string) {
 	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
 	if err != nil {
@@ -266,15 +305,16 @@ func (s *Server) adminApplyReserved(w http.ResponseWriter, r *http.Request, sub 
 		return
 	}
 	var request struct {
-		APIKey string `json:"apiKey"`
+		Variables      map[string]string `json:"variables"`
+		AuthOverride   json.RawMessage   `json:"authOverride,omitempty"`
+		ConfigOverride string            `json:"configOverride,omitempty"`
 	}
 	if err := json.Unmarshal(body, &request); err != nil {
 		http.Error(w, "invalid request body", http.StatusBadRequest)
 		return
 	}
-	request.APIKey = strings.TrimSpace(request.APIKey)
-	if request.APIKey == "" {
-		http.Error(w, "apiKey is required", http.StatusBadRequest)
+	if len(request.Variables) == 0 {
+		http.Error(w, "variables are required", http.StatusBadRequest)
 		return
 	}
 	settings, err := s.settings.get()
@@ -282,9 +322,35 @@ func (s *Server) adminApplyReserved(w http.ResponseWriter, r *http.Request, sub 
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	profile := buildReservedProfile(settings, request.APIKey)
-	meta := reservedMeta{Name: profile.Name, Type: profile.Type, Provider: profile.Provider}
-	if err := s.userProfiles.write(sub, profile.Name, meta, profile.AuthJSON, profile.ConfigTOML); err != nil {
+	profile, err := renderReservedProfile(settings, request.Variables, nil)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if profile.Name == "" {
+		http.Error(w, "profile template could not be rendered", http.StatusBadRequest)
+		return
+	}
+	authJSON := profile.AuthJSON
+	configTOML := profile.ConfigTOML
+	if len(request.AuthOverride) > 0 {
+		var testAuth map[string]any
+		if err := json.Unmarshal(request.AuthOverride, &testAuth); err != nil {
+			http.Error(w, "authOverride is not valid JSON: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+		authJSON = request.AuthOverride
+	}
+	if strings.TrimSpace(request.ConfigOverride) != "" {
+		var testConfig map[string]any
+		if err := toml.Unmarshal([]byte(request.ConfigOverride), &testConfig); err != nil {
+			http.Error(w, "configOverride is not valid TOML: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+		configTOML = []byte(request.ConfigOverride)
+	}
+	meta := reservedMeta{Name: profile.Name, Type: profile.Type, Provider: profile.Provider, Variables: nonSecretVariables(settings, request.Variables)}
+	if err := s.userProfiles.write(sub, profile.Name, meta, authJSON, configTOML); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}

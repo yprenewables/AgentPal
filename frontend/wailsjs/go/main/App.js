@@ -30,6 +30,10 @@ export function CreateAPIKeyProfile(arg1) {
   return window['go']['main']['App']['CreateAPIKeyProfile'](arg1);
 }
 
+export function UpdateAPIKeyProfile(arg1, arg2) {
+  return window['go']['main']['App']['UpdateAPIKeyProfile'](arg1, arg2);
+}
+
 export function DeleteAuthProfile(arg1) {
   return window['go']['main']['App']['DeleteAuthProfile'](arg1);
 }

@@ -22,9 +22,10 @@ type userProfileStore struct{ root string }
 func newUserProfileStore(root string) *userProfileStore { return &userProfileStore{root: root} }
 
 type reservedMeta struct {
-	Name     string `json:"name"`
-	Type     string `json:"type"`
-	Provider string `json:"provider"`
+	Name      string            `json:"name"`
+	Type      string            `json:"type"`
+	Provider  string            `json:"provider"`
+	Variables map[string]string `json:"variables,omitempty"`
 }
 
 type reservedProfile struct {
@@ -156,7 +157,7 @@ func profileDetail(p reservedProfile) types.RemoteAuthProfileDetail {
 	return types.RemoteAuthProfileDetail{
 		Name: p.Meta.Name, Provider: p.Meta.Provider, Type: p.Meta.Type,
 		ContentHash: p.ContentHash, UpdatedAt: p.UpdatedAt,
-		Auth: auth, ConfigAuthToml: string(p.ConfigTOML),
+		Auth: auth, ConfigAuthToml: string(p.ConfigTOML), Variables: p.Meta.Variables,
 	}
 }
 

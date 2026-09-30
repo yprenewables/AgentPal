@@ -16,6 +16,8 @@ export function CheckForUpdate():Promise<types.UpdateInfo>;
 
 export function CreateAPIKeyProfile(arg1:types.APIKeyProfileRequest):Promise<types.AuthProfile>;
 
+export function UpdateAPIKeyProfile(arg1:string,arg2:types.APIKeyProfileRequest):Promise<types.AuthProfile>;
+
 export function DeleteAuthProfile(arg1:string):Promise<void>;
 
 export function DeleteRemoteBackup(arg1:string,arg2:string):Promise<void>;

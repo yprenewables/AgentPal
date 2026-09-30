@@ -55,7 +55,7 @@ func adminDo(server *Server, method, path, token string, body io.Reader) *httpte
 	return recorder
 }
 
-const adminProfileBody = `{"type":"api_key","provider":"yangpu","auth":{"OPENAI_API_KEY":"sk-1"},"configAuthToml":"model_provider = \"yangpu\"\n\n[model_providers.yangpu]\nname = \"yangpu\"\nbase_url = \"https://x/v1\"\n"}`
+const adminProfileBody = `{"variables":{"provider":"yangpu","base_url":"https://x/v1","env_key":"OPENAI_API_KEY","wire_api":"responses","api_key":"sk-1"}}`
 
 func TestAdminProfilesCrudRoundTrip(t *testing.T) {
 	server, key := adminServerWithKey(t)
@@ -175,13 +175,13 @@ func TestAdminSettingsRoundTripAndValidation(t *testing.T) {
 	token := adminToken(t, key, "admin")
 
 	defaults := adminDo(server, http.MethodGet, "/v1/admin/settings", token, nil)
-	if defaults.Code != http.StatusOK || !strings.Contains(defaults.Body.String(), "\"provider\":\"memory\"") {
+	if defaults.Code != http.StatusOK || !strings.Contains(defaults.Body.String(), "profileTemplate") {
 		t.Fatalf("defaults status=%d body=%s", defaults.Code, defaults.Body.String())
 	}
 
-	custom := `{"provider":"gateway","baseURL":"https://gw.example/v1","wireAPI":"responses","envKey":"OPENAI_API_KEY"}`
+	custom := `{"profileTemplate":"model_provider = \"${provider}\"\n\n[model_providers.${provider}]\nname = \"${provider}\"\nbase_url = \"${base_url}\"\n","authTemplate":{"${env_key}":"${api_key}"},"variables":[{"name":"provider","label":"Provider","required":true},{"name":"base_url","label":"Base URL","default":"https://gw.example/v1","required":true},{"name":"env_key","label":"Env key","default":"OPENAI_API_KEY","required":true},{"name":"api_key","label":"API Key","required":true,"secret":true}]}`
 	saved := adminDo(server, http.MethodPut, "/v1/admin/settings", token, strings.NewReader(custom))
-	if saved.Code != http.StatusOK || !strings.Contains(saved.Body.String(), "\"provider\":\"gateway\"") {
+	if saved.Code != http.StatusOK || !strings.Contains(saved.Body.String(), "gw.example") {
 		t.Fatalf("save status=%d body=%s", saved.Code, saved.Body.String())
 	}
 	again := adminDo(server, http.MethodGet, "/v1/admin/settings", token, nil)
@@ -190,9 +190,8 @@ func TestAdminSettingsRoundTripAndValidation(t *testing.T) {
 	}
 
 	for _, bad := range []string{
-		`{"provider":"a.b","baseURL":"https://gw.example/v1","wireAPI":"responses","envKey":"OPENAI_API_KEY"}`,
-		`{"provider":"gw","baseURL":"not-a-url","wireAPI":"responses","envKey":"OPENAI_API_KEY"}`,
-		`{"provider":"gw","baseURL":"https://gw.example/v1","wireAPI":"responses","envKey":"1bad"}`,
+		`{"profileTemplate":"model_provider = \"${missing}\"","authTemplate":{"${api_key}":"${api_key}"},"variables":[{"name":"api_key","required":true,"secret":true}]}`,
+		`{"profileTemplate":"not valid = [","authTemplate":{"${api_key}":"${api_key}"},"variables":[{"name":"api_key","required":true,"secret":true}]}`,
 	} {
 		if got := adminDo(server, http.MethodPut, "/v1/admin/settings", token, strings.NewReader(bad)); got.Code != http.StatusBadRequest {
 			t.Fatalf("invalid settings accepted: %s -> %d", bad, got.Code)
@@ -204,23 +203,23 @@ func TestAdminApplyReservedUsesSettings(t *testing.T) {
 	server, key := adminServerWithKey(t)
 	token := adminToken(t, key, "admin")
 
-	settings := `{"provider":"memory","baseURL":"https://memory.example/codex/default","wireAPI":"responses","envKey":"OPENAI_API_KEY"}`
+	settings := `{"profileTemplate":"model_provider = \"${provider}\"\n\n[model_providers.${provider}]\nname = \"${provider}\"\nbase_url = \"${base_url}\"\n","authTemplate":{"${env_key}":"${api_key}"},"variables":[{"name":"provider","required":true},{"name":"base_url","default":"https://memory.example/codex/default","required":true},{"name":"env_key","default":"OPENAI_API_KEY","required":true},{"name":"api_key","required":true,"secret":true}]}`
 	if got := adminDo(server, http.MethodPut, "/v1/admin/settings", token, strings.NewReader(settings)); got.Code != http.StatusOK {
 		t.Fatalf("settings save status=%d body=%s", got.Code, got.Body.String())
 	}
 
-	applied := adminDo(server, http.MethodPost, "/v1/admin/user-profiles/user-1", token, strings.NewReader(`{"apiKey":"sk-mem-abc"}`))
+	applied := adminDo(server, http.MethodPost, "/v1/admin/user-profiles/user-1", token, strings.NewReader(`{"variables":{"provider":"memory","api_key":"sk-mem-abc"}}`))
 	if applied.Code != http.StatusOK || !strings.Contains(applied.Body.String(), "\"provider\":\"memory\"") {
 		t.Fatalf("apply status=%d body=%s", applied.Code, applied.Body.String())
 	}
 
 	detail := adminDo(server, http.MethodGet, "/v1/admin/user-profiles/user-1/memory", token, nil)
 	body := detail.Body.String()
-	if detail.Code != http.StatusOK || !strings.Contains(body, "sk-mem-abc") || !strings.Contains(body, "https://memory.example/codex/default") || !strings.Contains(body, "experimental_bearer_token") {
+	if detail.Code != http.StatusOK || !strings.Contains(body, "sk-mem-abc") || !strings.Contains(body, "https://memory.example/codex/default") {
 		t.Fatalf("detail status=%d body=%s", detail.Code, body)
 	}
 
-	empty := adminDo(server, http.MethodPost, "/v1/admin/user-profiles/user-1", token, strings.NewReader(`{"apiKey":""}`))
+	empty := adminDo(server, http.MethodPost, "/v1/admin/user-profiles/user-1", token, strings.NewReader(`{"variables":{}}`))
 	if empty.Code != http.StatusBadRequest {
 		t.Fatalf("empty api key status=%d", empty.Code)
 	}

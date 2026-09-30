@@ -69,17 +69,18 @@ function AuthenticationTab({ profiles, reload, setNotice }: { profiles: AuthProf
 function AuthenticationTabCompact({ profiles, reload, setNotice }: { profiles: AuthProfile[]; reload: () => Promise<void>; setNotice: (value: { kind: NoticeKind; text: string } | null) => void }) {
   const [current, setCurrent] = useState<CurrentAuthStatus | null>(null);
   const [showKey, setShowKey] = useState(false);
+  const [editing, setEditing] = useState<AuthProfile | null>(null);
   const [name, setName] = useState('');
   const [provider, setProvider] = useState('openai');
   const [model, setModel] = useState('');
   const [baseUrl, setBaseUrl] = useState('https://api.openai.com/v1');
   const [key, setKey] = useState('');
   const [confirmAction, setConfirmAction] = useState<{ kind: 'switch' | 'delete'; profile?: AuthProfile; description?: string } | null>(null);
-  const [login, setLogin] = useState<{ loggedIn: boolean; subject?: string }>({ loggedIn: false });
+  const [login, setLogin] = useState<{ loggedIn: boolean; subject?: string; name?: string; displayName?: string; email?: string }>({ loggedIn: false });
   const [syncItems, setSyncItems] = useState<{ name: string; status: string; detail?: string }[]>([]);
   const [loginBusy, setLoginBusy] = useState(false);
 
-  useEffect(() => { void api?.GetCentralLoginState().then((state) => setLogin({ loggedIn: state.loggedIn, subject: state.subject })).catch(() => setLogin({ loggedIn: false })); }, []);
+  useEffect(() => { void api?.GetCentralLoginState().then((state) => setLogin({ loggedIn: state.loggedIn, subject: state.subject, name: state.name, displayName: state.displayName, email: state.email })).catch(() => setLogin({ loggedIn: false })); }, []);
 
   async function runSync() {
     if (!api) return;
@@ -108,7 +109,7 @@ function AuthenticationTabCompact({ profiles, reload, setNotice }: { profiles: A
           break;
         }
         if (status.status === 'approved') {
-          setLogin({ loggedIn: true, subject: status.subject });
+          setLogin({ loggedIn: true, subject: status.subject, name: status.name, displayName: status.displayName, email: status.email });
           setNotice({ kind: 'success', text: 'Logged in with Casdoor.' });
           await runSync();
           return;
@@ -162,6 +163,25 @@ function AuthenticationTabCompact({ profiles, reload, setNotice }: { profiles: A
     try { await api.CreateAPIKeyProfile({ name, provider, baseUrl, apiKey: key }); setShowKey(false); setKey(''); await reload(); setNotice({ kind: 'success', text: 'API Key profile created.' }); } catch (error) { setNotice({ kind: 'error', text: String(error) }); }
   }
 
+  function editProfile(profile: AuthProfile) {
+    setEditing(profile);
+    setName(profile.name);
+    setProvider(profile.provider);
+    setBaseUrl(profile.baseUrl || '');
+    setKey('');
+  }
+
+  async function updateAPIKeyProfile() {
+    if (!api || !editing) return;
+    try {
+      await api.UpdateAPIKeyProfile(editing.id, { name, provider, baseUrl, apiKey: key });
+      setEditing(null);
+      setKey('');
+      await reload();
+      setNotice({ kind: 'success', text: 'API Key profile updated.' });
+    } catch (error) { setNotice({ kind: 'error', text: String(error) }); }
+  }
+
   async function activate(id: string) {
     if (!api) { setNotice({ kind: 'error', text: 'AgentPal backend is not available. Restart the desktop client.' }); return; }
     setNotice({ kind: 'info', text: 'Switching authentication profile...' });
@@ -213,7 +233,7 @@ function AuthenticationTabCompact({ profiles, reload, setNotice }: { profiles: A
     <div className="current-auth">
       <div className="current-auth-line">
         {login.loggedIn
-          ? <><strong>Casdoor: {login.subject}</strong><button className="secondary" onClick={() => void runSync()}>Sync central profiles</button><button className="secondary" onClick={() => void logout()}>Logout</button></>
+          ? <><strong>Casdoor: {login.displayName || login.name || login.subject}</strong><button className="secondary" onClick={() => void runSync()}>Sync central profiles</button><button className="secondary" onClick={() => void logout()}>Logout</button></>
           : <><strong>Central login</strong><button className="primary" onClick={() => void startLogin()} disabled={loginBusy}>{loginBusy ? 'Waiting for login...' : 'Login with Casdoor'}</button></>}
       </div>
     </div>
@@ -230,10 +250,10 @@ function AuthenticationTabCompact({ profiles, reload, setNotice }: { profiles: A
       {profiles.length === 0 && <div className="empty-inline">No local profiles yet.</div>}
       {profiles.map((profile) => <article className={`profile-row ${profile.active ? 'active' : ''}`} key={profile.id}>
         <div className="profile-main"><strong>{profileTitle(profile)}</strong><small>{profileSummary(profile)}</small></div>
-        <div className="profile-actions">{profile.active ? <span className="badge success-badge">Current</span> : <button className="secondary" onClick={() => void activate(profile.id)}>Select</button>}<button className="danger" disabled={profile.active} title={profile.active ? 'Switch to another profile before deleting this one.' : 'Delete this local profile.'} onClick={() => void removeProfile(profile)}>Delete</button></div>
+        <div className="profile-actions">{profile.type === 'api_key' && <button className="secondary" onClick={() => editProfile(profile)}>Edit</button>}{profile.active ? <span className="badge success-badge">Current</span> : <button className="secondary" onClick={() => void activate(profile.id)}>Select</button>}<button className="danger" disabled={profile.active} title={profile.active ? 'Switch to another profile before deleting this one.' : 'Delete this local profile.'} onClick={() => void removeProfile(profile)}>Delete</button></div>
       </article>)}
     </div>
-    {showKey && <div className="dialog-backdrop"><div className="dialog"><div className="section-heading"><h2>New API Key profile</h2><button className="icon-button" onClick={() => setShowKey(false)}>×</button></div><label className="field"><span>Name</span><input value={name} onChange={(event) => setName(event.target.value)} /></label><label className="field"><span>Provider</span><input value={provider} onChange={(event) => setProvider(event.target.value)} /></label><label className="field"><span>Base URL</span><input value={baseUrl} onChange={(event) => setBaseUrl(event.target.value)} /></label><label className="field"><span>API Key</span><input type="password" value={key} onChange={(event) => setKey(event.target.value)} /></label><button className="primary" onClick={() => void createAPIKeyProfile()}>Create profile</button></div></div>}
+    {(showKey || editing) && <div className="dialog-backdrop"><div className="dialog"><div className="section-heading"><h2>{editing ? 'Edit API Key profile' : 'New API Key profile'}</h2><button className="icon-button" onClick={() => { setShowKey(false); setEditing(null); }}>×</button></div><label className="field"><span>Name</span><input value={name} onChange={(event) => setName(event.target.value)} /></label><label className="field"><span>Provider</span><input value={provider} onChange={(event) => setProvider(event.target.value)} /></label><label className="field"><span>Base URL</span><input value={baseUrl} onChange={(event) => setBaseUrl(event.target.value)} /></label><label className="field"><span>API Key{editing ? ' (leave blank to keep current)' : ''}</span><input type="password" value={key} onChange={(event) => setKey(event.target.value)} /></label><button className="primary" onClick={() => void (editing ? updateAPIKeyProfile() : createAPIKeyProfile())}>{editing ? 'Save changes' : 'Create profile'}</button></div></div>}
     {confirmAction && <div className="dialog-backdrop"><div className="dialog"><div className="section-heading"><h2>{confirmAction.kind === 'delete' ? 'Delete profile?' : 'Provider configuration differs'}</h2><button className="icon-button" onClick={() => setConfirmAction(null)}>×</button></div><p>{confirmAction.kind === 'delete' ? `Delete ${confirmAction.profile?.name || 'this profile'} and its saved credentials? Remote backups and current credentials will not change.` : `${confirmAction.description || 'The local Provider table differs from this profile.'} Only auth.json and model_provider will change; the local Provider table will be kept.`}</p><div className="button-row"><button className="secondary" onClick={() => setConfirmAction(null)}>Cancel</button><button className={confirmAction.kind === 'delete' ? 'danger' : 'primary'} onClick={() => void confirmActionNow()}>{confirmAction.kind === 'delete' ? 'Delete' : 'Switch profile'}</button></div></div></div>}
   </section>;
 }

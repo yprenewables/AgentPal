@@ -32,6 +32,9 @@ type pendingLogin struct {
 	Failed       bool
 	FailReason   string
 	Subject      string
+	Name         string
+	DisplayName  string
+	Email        string
 	AccessToken  string
 	ExpiresIn    int
 	Consumed     bool
@@ -100,7 +103,7 @@ func (p *pendingLogins) peekByState(state string) *pendingLogin {
 	return item
 }
 
-func (p *pendingLogins) approve(state, subject, token string, expiresIn int) error {
+func (p *pendingLogins) approve(state, subject, name, displayName, email, token string, expiresIn int) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	item := p.findByStateLocked(state)
@@ -109,6 +112,9 @@ func (p *pendingLogins) approve(state, subject, token string, expiresIn int) err
 	}
 	item.Approved = true
 	item.Subject = subject
+	item.Name = name
+	item.DisplayName = displayName
+	item.Email = email
 	item.AccessToken = token
 	item.ExpiresIn = expiresIn
 	return nil
@@ -143,7 +149,7 @@ func (p *pendingLogins) take(id, pollToken string) (types.LoginStatus, error) {
 		return types.LoginStatus{Status: "pending"}, nil
 	}
 	item.Consumed = true
-	return types.LoginStatus{Status: "approved", Subject: item.Subject, AccessToken: item.AccessToken, ExpiresIn: item.ExpiresIn}, nil
+	return types.LoginStatus{Status: "approved", Subject: item.Subject, Name: item.Name, DisplayName: item.DisplayName, Email: item.Email, AccessToken: item.AccessToken, ExpiresIn: item.ExpiresIn}, nil
 }
 
 func (s *Server) oauthStart(w http.ResponseWriter, r *http.Request) {
@@ -218,13 +224,13 @@ func (s *Server) oauthCallback(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "login failed", http.StatusBadGateway)
 		return
 	}
-	subject, err := ParseJWTSubject(token)
+	subject, name, displayName, email, err := ParseJWTUserInfo(token)
 	if err != nil {
 		s.logins.fail(state, err.Error())
 		http.Error(w, "login failed", http.StatusBadGateway)
 		return
 	}
-	if err := s.logins.approve(state, subject, token, expiresIn); err != nil {
+	if err := s.logins.approve(state, subject, name, displayName, email, token, expiresIn); err != nil {
 		http.Error(w, err.Error(), http.StatusGone)
 		return
 	}
