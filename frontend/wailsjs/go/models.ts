@@ -364,6 +364,9 @@ export namespace types {
 	export class CentralLoginState {
 	    loggedIn: boolean;
 	    subject?: string;
+	    name?: string;
+	    displayName?: string;
+	    email?: string;
 	    // Go type: time
 	    expiresAt?: any;
 	
@@ -375,6 +378,9 @@ export namespace types {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.loggedIn = source["loggedIn"];
 	        this.subject = source["subject"];
+	        this.name = source["name"];
+	        this.displayName = source["displayName"];
+	        this.email = source["email"];
 	        this.expiresAt = this.convertValues(source["expiresAt"], null);
 	    }
 	
@@ -546,6 +552,9 @@ export namespace types {
 	export class LoginStatus {
 	    status: string;
 	    subject?: string;
+	    name?: string;
+	    displayName?: string;
+	    email?: string;
 	    accessToken?: string;
 	    expiresIn?: number;
 	    error?: string;
@@ -558,6 +567,9 @@ export namespace types {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.status = source["status"];
 	        this.subject = source["subject"];
+	        this.name = source["name"];
+	        this.displayName = source["displayName"];
+	        this.email = source["email"];
 	        this.accessToken = source["accessToken"];
 	        this.expiresIn = source["expiresIn"];
 	        this.error = source["error"];
@@ -636,6 +648,36 @@ export namespace types {
 		    }
 		    return a;
 		}
+	}
+	export class RawProfileContent {
+	    authJson: string;
+	    configToml: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new RawProfileContent(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.authJson = source["authJson"];
+	        this.configToml = source["configToml"];
+	    }
+	}
+	export class RawProfileRequest {
+	    name: string;
+	    authJson: string;
+	    configToml: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new RawProfileRequest(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.authJson = source["authJson"];
+	        this.configToml = source["configToml"];
+	    }
 	}
 	
 	export class SettingsRequest {

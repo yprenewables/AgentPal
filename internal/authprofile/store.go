@@ -142,6 +142,95 @@ func (s *Store) CreateAPIKey(req APIKeyRequest) (AuthProfile, error) {
 	return readSavedProfile(dir)
 }
 
+type RawProfileRequest struct {
+	Name       string
+	AuthJSON   string
+	ConfigTOML string
+}
+
+func (s *Store) CreateRaw(req RawProfileRequest) (AuthProfile, error) {
+	name := strings.TrimSpace(req.Name)
+	if name == "" {
+		return AuthProfile{}, errors.New("name is required")
+	}
+	var auth map[string]any
+	if err := json.Unmarshal([]byte(req.AuthJSON), &auth); err != nil {
+		return AuthProfile{}, errors.New("auth.json is not valid JSON: " + err.Error())
+	}
+	var config map[string]any
+	if err := toml.Unmarshal([]byte(req.ConfigTOML), &config); err != nil {
+		return AuthProfile{}, errors.New("config-auth.toml is not valid TOML: " + err.Error())
+	}
+	provider := stringValue(config["model_provider"])
+	if provider == "" {
+		return AuthProfile{}, errors.New("config-auth.toml must contain model_provider")
+	}
+	id := uuid.NewString()
+	now := time.Now().UTC()
+	p := AuthProfile{ID: id, Name: name, Type: "api_key", Provider: provider, Source: "manual", CreatedAt: now, UpdatedAt: now}
+	dir := filepath.Join(s.Root, id)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return p, err
+	}
+	if err := writeProfile(dir, p, []byte(req.AuthJSON), []byte(req.ConfigTOML)); err != nil {
+		return p, err
+	}
+	return readSavedProfile(dir)
+}
+
+func (s *Store) UpdateRaw(profileID string, req RawProfileRequest) (AuthProfile, error) {
+	if profileID == "" || filepath.Base(profileID) != profileID || profileID == "." || profileID == ".." {
+		return AuthProfile{}, errors.New("invalid profile ID")
+	}
+	name := strings.TrimSpace(req.Name)
+	if name == "" {
+		return AuthProfile{}, errors.New("name is required")
+	}
+	dir := filepath.Join(s.Root, profileID)
+	profile, err := readSavedProfile(dir)
+	if err != nil {
+		return AuthProfile{}, err
+	}
+	if profile.Type != "api_key" {
+		return AuthProfile{}, errors.New("only API key profiles can be edited")
+	}
+	var auth map[string]any
+	if err := json.Unmarshal([]byte(req.AuthJSON), &auth); err != nil {
+		return AuthProfile{}, errors.New("auth.json is not valid JSON: " + err.Error())
+	}
+	var config map[string]any
+	if err := toml.Unmarshal([]byte(req.ConfigTOML), &config); err != nil {
+		return AuthProfile{}, errors.New("config-auth.toml is not valid TOML: " + err.Error())
+	}
+	provider := stringValue(config["model_provider"])
+	if provider == "" {
+		return AuthProfile{}, errors.New("config-auth.toml must contain model_provider")
+	}
+	profile.Name = name
+	profile.Provider = provider
+	profile.UpdatedAt = time.Now().UTC()
+	if err := writeProfile(dir, profile, []byte(req.AuthJSON), []byte(req.ConfigTOML)); err != nil {
+		return profile, err
+	}
+	return readSavedProfile(dir)
+}
+
+func (s *Store) GetRawContent(profileID string) (authJSON, configTOML string, err error) {
+	if profileID == "" || filepath.Base(profileID) != profileID || profileID == "." || profileID == ".." {
+		return "", "", errors.New("invalid profile ID")
+	}
+	dir := filepath.Join(s.Root, profileID)
+	authData, err := os.ReadFile(filepath.Join(dir, "auth.json"))
+	if err != nil {
+		return "", "", err
+	}
+	configData, err := os.ReadFile(filepath.Join(dir, "config-auth.toml"))
+	if err != nil {
+		return "", "", err
+	}
+	return string(authData), string(configData), nil
+}
+
 func (s *Store) UpdateAPIKey(profileID string, req APIKeyRequest) (AuthProfile, error) {
 	if profileID == "" || filepath.Base(profileID) != profileID || profileID == "." || profileID == ".." {
 		return AuthProfile{}, errors.New("invalid profile ID")

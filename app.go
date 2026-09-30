@@ -260,6 +260,32 @@ func (a *App) UpdateAPIKeyProfile(id string, req types.APIKeyProfileRequest) (ty
 	p, err := authprofile.NewStore(root).UpdateAPIKey(id, authprofile.APIKeyRequest{Name: req.Name, Provider: req.Provider, BaseURL: req.BaseURL, APIKey: req.APIKey})
 	return profileType(p), err
 }
+
+func (a *App) CreateRawProfile(req types.RawProfileRequest) (types.AuthProfile, error) {
+	root, _ := codex.ExpandPath("~/.agentpal/auth-profiles")
+	p, err := authprofile.NewStore(root).CreateRaw(authprofile.RawProfileRequest{Name: req.Name, AuthJSON: req.AuthJSON, ConfigTOML: req.ConfigTOML})
+	return profileType(p), err
+}
+
+func (a *App) UpdateRawProfile(id string, req types.RawProfileRequest) (types.AuthProfile, error) {
+	root, _ := codex.ExpandPath("~/.agentpal/auth-profiles")
+	p, err := authprofile.NewStore(root).UpdateRaw(id, authprofile.RawProfileRequest{Name: req.Name, AuthJSON: req.AuthJSON, ConfigTOML: req.ConfigTOML})
+	return profileType(p), err
+}
+
+func (a *App) GetRawProfileContent(id string) (types.RawProfileContent, error) {
+	root, _ := codex.ExpandPath("~/.agentpal/auth-profiles")
+	auth, config, err := authprofile.NewStore(root).GetRawContent(id)
+	return types.RawProfileContent{AuthJSON: auth, ConfigTOML: config}, err
+}
+
+func (a *App) GetDefaultProfileTemplate() types.RawProfileContent {
+	return types.RawProfileContent{
+		AuthJSON:   "{\n  \"OPENAI_API_KEY\": \"sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\"\n}",
+		ConfigTOML: "model_provider = \"openai\"\n\n[model_providers.openai]\nname = \"openai\"\nbase_url = \"https://api.openai.com/v1\"\nenv_key = \"OPENAI_API_KEY\"\nwire_api = \"responses\"\n",
+	}
+}
+
 func (a *App) ActivateAuthProfile(id string) (types.ProfileSwitchResult, error) {
 	state, err := appconfig.ReadState()
 	if err != nil {

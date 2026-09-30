@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { api, type ApplyChange, type AuthProfile, type AuthSyncItem, type BackupInfo, type Bootstrap, type ConfigRefresh, type CurrentAuthStatus, type SettingsRequest } from './wails';
+import { api, type ApplyChange, type AuthProfile, type AuthSyncItem, type BackupInfo, type Bootstrap, type ConfigRefresh, type CurrentAuthStatus, type RawProfileContent, type RawProfileRequest, type SettingsRequest } from './wails';
 
 type Tab = 'configuration' | 'authentication' | 'backups';
 
@@ -68,13 +68,7 @@ function AuthenticationTab({ profiles, reload, setNotice }: { profiles: AuthProf
 
 function AuthenticationTabCompact({ profiles, reload, setNotice }: { profiles: AuthProfile[]; reload: () => Promise<void>; setNotice: (value: { kind: NoticeKind; text: string } | null) => void }) {
   const [current, setCurrent] = useState<CurrentAuthStatus | null>(null);
-  const [showKey, setShowKey] = useState(false);
-  const [editing, setEditing] = useState<AuthProfile | null>(null);
-  const [name, setName] = useState('');
-  const [provider, setProvider] = useState('openai');
-  const [model, setModel] = useState('');
-  const [baseUrl, setBaseUrl] = useState('https://api.openai.com/v1');
-  const [key, setKey] = useState('');
+  const [editDialog, setEditDialog] = useState<{ open: boolean; profile?: AuthProfile; name: string; authJson: string; configToml: string }>({ open: false, name: '', authJson: '', configToml: '' });
   const [confirmAction, setConfirmAction] = useState<{ kind: 'switch' | 'delete'; profile?: AuthProfile; description?: string } | null>(null);
   const [login, setLogin] = useState<{ loggedIn: boolean; subject?: string; name?: string; displayName?: string; email?: string }>({ loggedIn: false });
   const [syncItems, setSyncItems] = useState<AuthSyncItem[]>([]);
@@ -90,7 +84,7 @@ function AuthenticationTabCompact({ profiles, reload, setNotice }: { profiles: A
     }).catch(() => setLogin({ loggedIn: false }));
   }, []);
 
-  // silent=true 用于自动同步：成功时不覆盖页面提示，只在失败时提示。
+  // silent=true 用于自动同步：成功时不弹提示，只在新增 profile 或失败时提示。
   async function runSync(silent = false) {
     if (!api) return;
     setSyncing(true);
@@ -99,8 +93,7 @@ function AuthenticationTabCompact({ profiles, reload, setNotice }: { profiles: A
       setSyncItems(report.items);
       await reload();
       const added = report.items.filter((item) => item.status === 'added').length;
-      if (!silent) setNotice({ kind: 'success', text: `Central profiles checked: ${report.items.length}.` });
-      else if (added > 0) setNotice({ kind: 'success', text: `Added ${added} central profile${added > 1 ? 's' : ''}.` });
+      if (added > 0 && silent) setNotice({ kind: 'success', text: `Added ${added} central profile${added > 1 ? 's' : ''}.` });
     } catch (error) {
       setNotice({ kind: 'error', text: `Central profile sync failed: ${String(error)}` });
     } finally {
@@ -177,28 +170,37 @@ function AuthenticationTabCompact({ profiles, reload, setNotice }: { profiles: A
     try { await api.ImportCurrentAuth('Current ChatGPT login'); await reload(); setNotice({ kind: 'success', text: 'Current ChatGPT login imported.' }); } catch (error) { setNotice({ kind: 'error', text: String(error) }); }
   }
 
-  async function createAPIKeyProfile() {
+  async function openCreateDialog() {
     if (!api) return;
-    try { await api.CreateAPIKeyProfile({ name, provider, baseUrl, apiKey: key }); setShowKey(false); setKey(''); await reload(); setNotice({ kind: 'success', text: 'API Key profile created.' }); } catch (error) { setNotice({ kind: 'error', text: String(error) }); }
+    const template = await api.GetDefaultProfileTemplate();
+    setEditDialog({ open: true, name: 'New Profile', authJson: template.authJson, configToml: template.configToml });
   }
 
-  function editProfile(profile: AuthProfile) {
-    setEditing(profile);
-    setName(profile.name);
-    setProvider(profile.provider);
-    setBaseUrl(profile.baseUrl || '');
-    setKey('');
-  }
-
-  async function updateAPIKeyProfile() {
-    if (!api || !editing) return;
+  async function openEditDialog(profile: AuthProfile) {
+    if (!api) return;
     try {
-      await api.UpdateAPIKeyProfile(editing.id, { name, provider, baseUrl, apiKey: key });
-      setEditing(null);
-      setKey('');
+      const content = await api.GetRawProfileContent(profile.id);
+      setEditDialog({ open: true, profile, name: profile.name, authJson: content.authJson, configToml: content.configToml });
+    } catch (error) {
+      setNotice({ kind: 'error', text: String(error) });
+    }
+  }
+
+  async function saveRawProfile() {
+    if (!api) return;
+    try {
+      if (editDialog.profile) {
+        await api.UpdateRawProfile(editDialog.profile.id, { name: editDialog.name, authJson: editDialog.authJson, configToml: editDialog.configToml });
+        setNotice({ kind: 'success', text: 'Profile updated.' });
+      } else {
+        await api.CreateRawProfile({ name: editDialog.name, authJson: editDialog.authJson, configToml: editDialog.configToml });
+        setNotice({ kind: 'success', text: 'Profile created.' });
+      }
+      setEditDialog({ open: false, name: '', authJson: '', configToml: '' });
       await reload();
-      setNotice({ kind: 'success', text: 'API Key profile updated.' });
-    } catch (error) { setNotice({ kind: 'error', text: String(error) }); }
+    } catch (error) {
+      setNotice({ kind: 'error', text: String(error) });
+    }
   }
 
   async function activate(id: string) {
@@ -254,7 +256,6 @@ function AuthenticationTabCompact({ profiles, reload, setNotice }: { profiles: A
   return <section className="workspace">
     <div className="section-heading">
       <div><h1>Authentication</h1><p>Choose one local API Key or ChatGPT profile.</p></div>
-      <button className="primary" onClick={() => setShowKey(true)}>New API Key</button>
     </div>
     {!hasCurrentProfile && current?.apiKeyPreview && <div className="current-auth"><div className="current-auth-line"><strong>API KEY: {current.apiKeyPreview}</strong><span>{current.baseUrl || 'base_url not detected'}</span><button className="secondary" onClick={() => void importCurrentAPIKey()}>Import</button></div></div>}
     {!hasCurrentProfile && !current?.apiKeyPreview && current?.chatgptUserId && <div className="current-auth"><div className="current-auth-line"><strong>ChatGPT User ID: {current.chatgptUserId}</strong><span>expire at: {current.chatgptExpiresAt || 'unknown'}</span><button className="secondary" onClick={() => void importCurrentChatGPT()}>Import</button></div></div>}
@@ -262,8 +263,8 @@ function AuthenticationTabCompact({ profiles, reload, setNotice }: { profiles: A
       <div className="profile-group-heading">
         <h2 id="central-profiles-heading">Central profiles{displayName && ` · ${displayName}`}</h2>
         <div className="profile-group-actions">
-          {login.loggedIn && <><button className="secondary" disabled={syncing} onClick={() => void runSync()}>{syncing ? 'Refreshing...' : 'Refresh'}</button><button className="secondary" onClick={() => void logout()}>Logout</button></>}
-          {!login.loggedIn && centralProfiles.length > 0 && <button className="primary" onClick={() => void startLogin()} disabled={loginBusy}>{loginBusy ? 'Waiting for login...' : 'Login with Casdoor'}</button>}
+          {login.loggedIn && <><IconButton label={syncing ? 'Refreshing' : 'Refresh central profiles'} disabled={syncing} onClick={() => void runSync()}><RefreshIcon spinning={syncing} /></IconButton><IconButton label="Log out" onClick={() => void logout()}><LogoutIcon /></IconButton></>}
+          {!login.loggedIn && centralProfiles.length > 0 && <button className="primary compact" onClick={() => void startLogin()} disabled={loginBusy}>{loginBusy ? 'Waiting...' : 'Log in'}</button>}
         </div>
       </div>
       {!login.loggedIn && centralProfiles.length === 0 && <div className="empty-state compact">
@@ -280,10 +281,9 @@ function AuthenticationTabCompact({ profiles, reload, setNotice }: { profiles: A
           return <article className={`profile-row central ${profile.active ? 'active' : ''}`} key={profile.id}>
             <div className="profile-main"><strong>{profileTitle(profile)}</strong><small>{profileSummary(profile)}</small><small className={`sync-status sync-${item ? (needsSync ? 'needs_sync' : item.status === 'needs_sync' ? 'kept' : item.status) : 'missing'}`}>{centralStatusText(item, login.loggedIn, syncing, !!item && dismissed.includes(item.name))}</small></div>
             <div className="profile-actions">
-              {needsSync && <button className="primary" onClick={() => void overwrite(item.name)}>Update from server</button>}
-              {needsSync && <button className="secondary" onClick={() => dismissItem(item.name)}>Keep local</button>}
-              {profile.active ? <span className="badge success-badge">Current</span> : <button className="secondary" onClick={() => void activate(profile.id)}>Select</button>}
-              <button className="danger" disabled={profile.active} title={profile.active ? 'Switch to another profile before deleting this one.' : 'Delete the local copy of this central profile.'} onClick={() => void removeProfile(profile)}>Delete</button>
+              {needsSync && <IconButton label="Update from server" onClick={() => void overwrite(item.name)}><DownloadIcon /></IconButton>}
+              {needsSync && <IconButton label="Keep local copy" onClick={() => dismissItem(item.name)}><CloseIcon /></IconButton>}
+              {profile.active ? <span className="badge success-badge">Current</span> : <button className="secondary compact" onClick={() => void activate(profile.id)}>Use</button>}
             </div>
           </article>;
         })}
@@ -295,17 +295,29 @@ function AuthenticationTabCompact({ profiles, reload, setNotice }: { profiles: A
     <section className="profile-group" aria-labelledby="local-profiles-heading">
       <div className="profile-group-heading">
         <h2 id="local-profiles-heading">Local profiles</h2>
-        <span className="badge">This Mac only</span>
+        <div className="profile-group-actions">
+          <IconButton label="New local profile" onClick={() => void openCreateDialog()}><PlusIcon /></IconButton>
+        </div>
       </div>
       <div className="profile-list">
         {localProfiles.length === 0 && <div className="empty-inline">No local profiles yet.</div>}
         {localProfiles.map((profile) => <article className={`profile-row ${profile.active ? 'active' : ''}`} key={profile.id}>
           <div className="profile-main"><strong>{profileTitle(profile)}</strong><small>{profileSummary(profile)}</small></div>
-          <div className="profile-actions">{profile.type === 'api_key' && <button className="secondary" onClick={() => editProfile(profile)}>Edit</button>}{profile.active ? <span className="badge success-badge">Current</span> : <button className="secondary" onClick={() => void activate(profile.id)}>Select</button>}<button className="danger" disabled={profile.active} title={profile.active ? 'Switch to another profile before deleting this one.' : 'Delete this local profile.'} onClick={() => void removeProfile(profile)}>Delete</button></div>
+          <div className="profile-actions">
+            {profile.type === 'api_key' && <IconButton label={`Edit ${profile.name}`} onClick={() => void openEditDialog(profile)}><EditIcon /></IconButton>}
+            <IconButton label={profile.active ? 'Switch to another profile before deleting this one' : `Delete ${profile.name}`} danger disabled={profile.active} onClick={() => void removeProfile(profile)}><TrashIcon /></IconButton>
+            {profile.active ? <span className="badge success-badge">Current</span> : <button className="secondary compact" onClick={() => void activate(profile.id)}>Use</button>}
+          </div>
         </article>)}
       </div>
     </section>
-    {(showKey || editing) && <div className="dialog-backdrop"><div className="dialog"><div className="section-heading"><h2>{editing ? 'Edit API Key profile' : 'New API Key profile'}</h2><button className="icon-button" onClick={() => { setShowKey(false); setEditing(null); }}>×</button></div><label className="field"><span>Name</span><input value={name} onChange={(event) => setName(event.target.value)} /></label><label className="field"><span>Provider</span><input value={provider} onChange={(event) => setProvider(event.target.value)} /></label><label className="field"><span>Base URL</span><input value={baseUrl} onChange={(event) => setBaseUrl(event.target.value)} /></label><label className="field"><span>API Key{editing ? ' (leave blank to keep current)' : ''}</span><input type="password" value={key} onChange={(event) => setKey(event.target.value)} /></label><button className="primary" onClick={() => void (editing ? updateAPIKeyProfile() : createAPIKeyProfile())}>{editing ? 'Save changes' : 'Create profile'}</button></div></div>}
+    {editDialog.open && <div className="dialog-backdrop"><div className="dialog wide" role="dialog" aria-modal="true" aria-labelledby="profile-editor-title">
+      <div className="section-heading"><h2 id="profile-editor-title">{editDialog.profile ? 'Edit local profile' : 'New local profile'}</h2><IconButton label="Close" onClick={() => setEditDialog({ open: false, name: '', authJson: '', configToml: '' })}><CloseIcon /></IconButton></div>
+      <label className="field"><span>Name</span><input value={editDialog.name} onChange={(event) => setEditDialog({ ...editDialog, name: event.target.value })} /></label>
+      <label className="field"><span>auth.json</span><textarea className="code-editor" spellCheck={false} rows={5} value={editDialog.authJson} onChange={(event) => setEditDialog({ ...editDialog, authJson: event.target.value })} /></label>
+      <label className="field"><span>config-auth.toml</span><textarea className="code-editor" spellCheck={false} rows={10} value={editDialog.configToml} onChange={(event) => setEditDialog({ ...editDialog, configToml: event.target.value })} /></label>
+      <div className="button-row dialog-actions"><button className="secondary" onClick={() => setEditDialog({ open: false, name: '', authJson: '', configToml: '' })}>Cancel</button><button className="primary" onClick={() => void saveRawProfile()}>{editDialog.profile ? 'Save' : 'Create'}</button></div>
+    </div></div>}
     {confirmAction && <div className="dialog-backdrop"><div className="dialog"><div className="section-heading"><h2>{confirmAction.kind === 'delete' ? 'Delete profile?' : 'Provider configuration differs'}</h2><button className="icon-button" onClick={() => setConfirmAction(null)}>×</button></div><p>{confirmAction.kind === 'delete' ? `Delete ${confirmAction.profile?.name || 'this profile'} and its saved credentials? Remote backups and current credentials will not change.` : `${confirmAction.description || 'The local Provider table differs from this profile.'} Only auth.json and model_provider will change; the local Provider table will be kept.`}</p><div className="button-row"><button className="secondary" onClick={() => setConfirmAction(null)}>Cancel</button><button className={confirmAction.kind === 'delete' ? 'danger' : 'primary'} onClick={() => void confirmActionNow()}>{confirmAction.kind === 'delete' ? 'Delete' : 'Switch profile'}</button></div></div></div>}
   </section>;
 }
@@ -359,3 +371,15 @@ type NoticeKind = 'info' | 'success' | 'warning' | 'error';
 function Notice({ kind, children }: { kind: NoticeKind; children: ReactNode }) { return <div className={`notice ${kind}`}>{children}</div>; }
 function labelForTab(tab: Tab) { return tab[0].toUpperCase() + tab.slice(1); }
 function statusLabel(status: string) { return status === 'local_only' ? 'Local only' : status[0].toUpperCase() + status.slice(1); }
+
+// 图标按钮
+function IconButton({ label, onClick, disabled, danger, children }: { label: string; onClick: () => void; disabled?: boolean; danger?: boolean; children: ReactNode }) {
+  return <button className={`icon-btn${danger ? ' danger' : ''}`} aria-label={label} title={label} disabled={disabled} onClick={onClick}>{children}</button>;
+}
+function RefreshIcon({ spinning }: { spinning?: boolean }) { return <svg className={spinning ? 'spin' : ''} width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path fillRule="evenodd" d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z"/><path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z"/></svg>; }
+function LogoutIcon() { return <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path fillRule="evenodd" d="M6 12.5a.5.5 0 0 0 .5.5h8a.5.5 0 0 0 .5-.5v-9a.5.5 0 0 0-.5-.5h-8a.5.5 0 0 0-.5.5v2a.5.5 0 0 1-1 0v-2A1.5 1.5 0 0 1 6.5 2h8A1.5 1.5 0 0 1 16 3.5v9a1.5 1.5 0 0 1-1.5 1.5h-8A1.5 1.5 0 0 1 5 12.5v-2a.5.5 0 0 1 1 0v2z"/><path fillRule="evenodd" d="M.146 8.354a.5.5 0 0 1 0-.708l3-3a.5.5 0 1 1 .708.708L1.707 7.5H10.5a.5.5 0 0 1 0 1H1.707l2.147 2.146a.5.5 0 0 1-.708.708l-3-3z"/></svg>; }
+function EditIcon() { return <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M12.146.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1 0 .708l-10 10a.5.5 0 0 1-.168.11l-5 2a.5.5 0 0 1-.65-.65l2-5a.5.5 0 0 1 .11-.168l10-10zM11.207 2.5 13.5 4.793 14.793 3.5 12.5 1.207 11.207 2.5zm1.586 3L10.5 3.207 4 9.707V10h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.293l6.5-6.5zm-9.761 5.175-.106.106-1.528 3.821 3.821-1.528.106-.106A.5.5 0 0 1 5 12.5V12h-.5a.5.5 0 0 1-.5-.5V11h-.5a.5.5 0 0 1-.468-.325z"/></svg>; }
+function TrashIcon() { return <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/><path fillRule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/></svg>; }
+function PlusIcon() { return <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path fillRule="evenodd" d="M8 2a.5.5 0 0 1 .5.5v5h5a.5.5 0 0 1 0 1h-5v5a.5.5 0 0 1-1 0v-5h-5a.5.5 0 0 1 0-1h5v-5A.5.5 0 0 1 8 2Z"/></svg>; }
+function CloseIcon() { return <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M2.146 2.854a.5.5 0 1 1 .708-.708L8 7.293l5.146-5.147a.5.5 0 0 1 .708.708L8.707 8l5.147 5.146a.5.5 0 0 1-.708.708L8 8.707l-5.146 5.147a.5.5 0 0 1-.708-.708L7.293 8 2.146 2.854Z"/></svg>; }
+function DownloadIcon() { return <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/><path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708l3 3z"/></svg>; }

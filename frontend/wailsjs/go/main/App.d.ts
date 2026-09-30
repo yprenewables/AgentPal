@@ -16,7 +16,7 @@ export function CheckForUpdate():Promise<types.UpdateInfo>;
 
 export function CreateAPIKeyProfile(arg1:types.APIKeyProfileRequest):Promise<types.AuthProfile>;
 
-export function UpdateAPIKeyProfile(arg1:string,arg2:types.APIKeyProfileRequest):Promise<types.AuthProfile>;
+export function CreateRawProfile(arg1:types.RawProfileRequest):Promise<types.AuthProfile>;
 
 export function DeleteAuthProfile(arg1:string):Promise<void>;
 
@@ -33,6 +33,10 @@ export function GetCentralLoginState():Promise<types.CentralLoginState>;
 export function GetCurrentAuthStatus():Promise<types.CurrentAuthStatus>;
 
 export function GetDefaultCodexDir():Promise<string>;
+
+export function GetDefaultProfileTemplate():Promise<types.RawProfileContent>;
+
+export function GetRawProfileContent(arg1:string):Promise<types.RawProfileContent>;
 
 export function ImportCurrentAPIKey(arg1:string):Promise<types.AuthProfile>;
 
@@ -61,5 +65,9 @@ export function SaveSettings(arg1:types.SettingsRequest):Promise<types.Bootstrap
 export function StartCentralLogin():Promise<types.LoginStart>;
 
 export function SyncCentralAuthProfiles():Promise<types.AuthSyncReport>;
+
+export function UpdateAPIKeyProfile(arg1:string,arg2:types.APIKeyProfileRequest):Promise<types.AuthProfile>;
+
+export function UpdateRawProfile(arg1:string,arg2:types.RawProfileRequest):Promise<types.AuthProfile>;
 
 export function UploadAuthProfile(arg1:string,arg2:boolean):Promise<void>;

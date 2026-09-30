@@ -166,6 +166,15 @@ type APIKeyProfileRequest struct {
 	BaseURL  string `json:"baseUrl"`
 	APIKey   string `json:"apiKey"`
 }
+type RawProfileRequest struct {
+	Name       string `json:"name"`
+	AuthJSON   string `json:"authJson"`
+	ConfigTOML string `json:"configToml"`
+}
+type RawProfileContent struct {
+	AuthJSON   string `json:"authJson"`
+	ConfigTOML string `json:"configToml"`
+}
 type BackupInfo struct {
 	Device    string      `json:"device"`
 	Profile   AuthProfile `json:"profile"`

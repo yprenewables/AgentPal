@@ -16,6 +16,8 @@ export type LoginStatus = { status: 'pending' | 'approved' | 'failed'; subject?:
 export type CentralLoginState = { loggedIn: boolean; subject?: string; name?: string; displayName?: string; email?: string; expiresAt?: string };
 export type AuthSyncItem = { name: string; status: 'added' | 'synced' | 'needs_sync' | 'error'; detail?: string };
 export type AuthSyncReport = { items: AuthSyncItem[] };
+export type RawProfileContent = { authJson: string; configToml: string };
+export type RawProfileRequest = { name: string; authJson: string; configToml: string };
 
 type Backend = { App: {
   GetBootstrap(): Promise<Bootstrap>;
@@ -28,6 +30,10 @@ type Backend = { App: {
   ImportCurrentAPIKey(name: string): Promise<AuthProfile>;
   CreateAPIKeyProfile(request: APIKeyProfileRequest): Promise<AuthProfile>;
   UpdateAPIKeyProfile(id: string, request: APIKeyProfileRequest): Promise<AuthProfile>;
+  CreateRawProfile(request: RawProfileRequest): Promise<AuthProfile>;
+  UpdateRawProfile(id: string, request: RawProfileRequest): Promise<AuthProfile>;
+  GetRawProfileContent(id: string): Promise<RawProfileContent>;
+  GetDefaultProfileTemplate(): Promise<RawProfileContent>;
   ActivateAuthProfile(id: string): Promise<ProfileSwitchResult>;
   PreviewAuthProfile(id: string): Promise<ProfileSwitchPreview>;
   ActivateAuthProfileWithConflict(id: string, allowProviderConflict: boolean): Promise<ProfileSwitchResult>;

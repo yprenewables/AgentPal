@@ -59,3 +59,17 @@ h2 { font-size:19px; }
 .server-workspace { display:grid; gap:14px; }.server-grid { display:grid; gap:10px; grid-template-columns:repeat(3,minmax(0,1fr)); }.server-grid div { border:1px solid #dce3eb; border-radius:8px; display:grid; gap:6px; min-width:0; padding:13px; }.server-grid small { color:#748193; }.server-grid strong { overflow-wrap:anywhere; }
 .version-status { bottom:18px; color:#7b8796; font-size:11px; position:fixed; right:24px; }
 @media(max-width:680px) { .shell { width:calc(100vw - 24px); padding-top:18px; }.topbar { align-items:flex-start; }.node-strip { align-items:flex-start; flex-wrap:wrap; }.text-button { margin-left:auto; }.workspace { padding:18px; }.section-heading { flex-direction:column; }.server-grid { grid-template-columns:1fr; }.version-status { bottom:10px; right:12px; } }
+.icon-btn { align-items:center; background:#fff; border:1px solid #cbd6e2; border-radius:6px; color:#172033; cursor:pointer; display:inline-flex; height:2rem; justify-content:center; padding:0; transition:all .15s; width:2rem; }
+.icon-btn:hover:not(:disabled) { background:#f7f9fb; border-color:#1f7a6d; }
+.icon-btn:disabled { cursor:not-allowed; opacity:.4; }
+.icon-btn.danger { color:#9a1f1f; }
+.icon-btn.danger:hover:not(:disabled) { background:#fff1f1; border-color:#9a1f1f; }
+.icon-btn svg { height:16px; width:16px; }
+.icon-btn svg.spin { animation:spin 1s linear infinite; }
+@keyframes spin { from { transform:rotate(0deg); } to { transform:rotate(360deg); } }
+.code-editor { background:#f7fafc; border:1px solid #cbd6e2; border-radius:6px; color:#172033; font-family:'SF Mono',Monaco,'Cascadia Code','Roboto Mono',Consolas,'Courier New',monospace; font-size:13px; line-height:1.5; min-height:8rem; padding:.75rem; resize:vertical; width:100%; }
+.code-editor:focus { border-color:#1f7a6d; box-shadow:0 0 0 3px rgba(31,122,109,.1); outline:none; }
+.dialog.wide { max-width:56rem; width:90vw; }
+.dialog-actions { margin-top:1.5rem; }
+button.compact { font-size:.875rem; padding:.375rem .75rem; }
+button.primary.compact { min-width:4rem; }

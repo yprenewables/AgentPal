@@ -30,8 +30,8 @@ export function CreateAPIKeyProfile(arg1) {
   return window['go']['main']['App']['CreateAPIKeyProfile'](arg1);
 }
 
-export function UpdateAPIKeyProfile(arg1, arg2) {
-  return window['go']['main']['App']['UpdateAPIKeyProfile'](arg1, arg2);
+export function CreateRawProfile(arg1) {
+  return window['go']['main']['App']['CreateRawProfile'](arg1);
 }
 
 export function DeleteAuthProfile(arg1) {
@@ -64,6 +64,14 @@ export function GetCurrentAuthStatus() {
 
 export function GetDefaultCodexDir() {
   return window['go']['main']['App']['GetDefaultCodexDir']();
+}
+
+export function GetDefaultProfileTemplate() {
+  return window['go']['main']['App']['GetDefaultProfileTemplate']();
+}
+
+export function GetRawProfileContent(arg1) {
+  return window['go']['main']['App']['GetRawProfileContent'](arg1);
 }
 
 export function ImportCurrentAPIKey(arg1) {
@@ -120,6 +128,14 @@ export function StartCentralLogin() {
 
 export function SyncCentralAuthProfiles() {
   return window['go']['main']['App']['SyncCentralAuthProfiles']();
+}
+
+export function UpdateAPIKeyProfile(arg1, arg2) {
+  return window['go']['main']['App']['UpdateAPIKeyProfile'](arg1, arg2);
+}
+
+export function UpdateRawProfile(arg1, arg2) {
+  return window['go']['main']['App']['UpdateRawProfile'](arg1, arg2);
 }
 
 export function UploadAuthProfile(arg1, arg2) {
