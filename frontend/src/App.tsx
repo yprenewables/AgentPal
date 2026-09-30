@@ -250,29 +250,30 @@ function AuthenticationTabCompact({ profiles, reload, setNotice }: { profiles: A
   const syncByName = new Map(syncItems.map((item) => [item.name, item]));
   const centralNames = new Set(centralProfiles.map((profile) => profile.reservedName || profile.name));
   const centralOnlyItems = syncItems.filter((item) => !centralNames.has(item.name));
+  const displayName = login.displayName || login.name || (login.subject && !login.subject.match(/^[0-9a-f-]{36}$/i) ? login.subject : '');
   return <section className="workspace">
     <div className="section-heading">
       <div><h1>Authentication</h1><p>Choose one local API Key or ChatGPT profile.</p></div>
       <button className="primary" onClick={() => setShowKey(true)}>New API Key</button>
     </div>
-    <div className="current-auth">
-      <div className="current-auth-line">
-        {login.loggedIn
-          ? <><strong>Casdoor: {login.displayName || login.name || login.subject}</strong><button className="secondary" disabled={syncing} onClick={() => void runSync()}>{syncing ? 'Refreshing...' : 'Refresh central profiles'}</button><button className="secondary" onClick={() => void logout()}>Logout</button></>
-          : <><strong>Central login</strong><button className="primary" onClick={() => void startLogin()} disabled={loginBusy}>{loginBusy ? 'Waiting for login...' : 'Login with Casdoor'}</button></>}
-      </div>
-    </div>
-
     {!hasCurrentProfile && current?.apiKeyPreview && <div className="current-auth"><div className="current-auth-line"><strong>API KEY: {current.apiKeyPreview}</strong><span>{current.baseUrl || 'base_url not detected'}</span><button className="secondary" onClick={() => void importCurrentAPIKey()}>Import</button></div></div>}
     {!hasCurrentProfile && !current?.apiKeyPreview && current?.chatgptUserId && <div className="current-auth"><div className="current-auth-line"><strong>ChatGPT User ID: {current.chatgptUserId}</strong><span>expire at: {current.chatgptExpiresAt || 'unknown'}</span><button className="secondary" onClick={() => void importCurrentChatGPT()}>Import</button></div></div>}
-    {(login.loggedIn || centralProfiles.length > 0) && <section className="profile-group" aria-labelledby="central-profiles-heading">
+    <section className="profile-group" aria-labelledby="central-profiles-heading">
       <div className="profile-group-heading">
-        <h2 id="central-profiles-heading">Central profiles</h2>
-        <span className="badge source-central">{login.loggedIn ? `From server · ${login.displayName || login.name || login.subject}` : 'From server · logged out'}</span>
-        {syncing && <small>Loading...</small>}
+        <h2 id="central-profiles-heading">Central profiles{displayName && ` · ${displayName}`}</h2>
+        <div className="profile-group-actions">
+          {login.loggedIn && <><button className="secondary" disabled={syncing} onClick={() => void runSync()}>{syncing ? 'Refreshing...' : 'Refresh'}</button><button className="secondary" onClick={() => void logout()}>Logout</button></>}
+          {!login.loggedIn && centralProfiles.length > 0 && <button className="primary" onClick={() => void startLogin()} disabled={loginBusy}>{loginBusy ? 'Waiting for login...' : 'Login with Casdoor'}</button>}
+        </div>
       </div>
-      <div className="profile-list">
-        {centralProfiles.length === 0 && centralOnlyItems.length === 0 && <div className="empty-inline">{syncing ? 'Loading central profiles...' : 'No profiles are assigned to this account on the server.'}</div>}
+      {!login.loggedIn && centralProfiles.length === 0 && <div className="empty-state compact">
+        <div className="status-symbol">🔒</div>
+        <h3>Sign in to access central profiles</h3>
+        <p>Server-managed authentication profiles will appear here after login.</p>
+        <button className="primary" onClick={() => void startLogin()} disabled={loginBusy}>{loginBusy ? 'Waiting for login...' : 'Login with Casdoor'}</button>
+      </div>}
+      {(login.loggedIn || centralProfiles.length > 0) && <div className="profile-list">
+        {login.loggedIn && centralProfiles.length === 0 && centralOnlyItems.length === 0 && <div className="empty-inline">{syncing ? 'Loading central profiles...' : 'No profiles are assigned to this account on the server.'}</div>}
         {centralProfiles.map((profile) => {
           const item = syncByName.get(profile.reservedName || profile.name);
           const needsSync = item?.status === 'needs_sync' && !dismissed.includes(item.name);
@@ -289,8 +290,8 @@ function AuthenticationTabCompact({ profiles, reload, setNotice }: { profiles: A
         {centralOnlyItems.map((item) => <article className="profile-row central" key={`remote:${item.name}`}>
           <div className="profile-main"><strong>{item.name}</strong><small className="sync-status sync-error">Could not load from server{item.detail ? ` · ${item.detail}` : ''}</small></div>
         </article>)}
-      </div>
-    </section>}
+      </div>}
+    </section>
     <section className="profile-group" aria-labelledby="local-profiles-heading">
       <div className="profile-group-heading">
         <h2 id="local-profiles-heading">Local profiles</h2>
