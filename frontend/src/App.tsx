@@ -75,6 +75,14 @@ function AuthenticationTabCompact({ profiles, reload, setNotice }: { profiles: A
   const [dismissed, setDismissed] = useState<string[]>([]);
   const [loginBusy, setLoginBusy] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [menuOpen, setMenuOpen] = useState<string | null>(null);
+
+  // 点击页面其他位置时关闭行内「更多」菜单。
+  useEffect(() => {
+    function closeMenu() { setMenuOpen(null); }
+    window.addEventListener('click', closeMenu);
+    return () => window.removeEventListener('click', closeMenu);
+  }, []);
 
   // 已登录时自动拉取服务端为当前用户维护的 profile，无需手动点击同步。
   useEffect(() => {
@@ -310,8 +318,13 @@ function AuthenticationTabCompact({ profiles, reload, setNotice }: { profiles: A
           <div className="profile-main"><strong>{profileTitle(profile)}</strong><small>{profileSummary(profile)}</small></div>
           <div className="profile-actions inline">
             {profile.active ? <span className="badge success-badge">Current</span> : <button className="secondary compact" onClick={() => void activate(profile.id)}>Use</button>}
-            {profile.type === 'api_key' && <IconButton label={`Edit ${profile.name}`} onClick={() => void openEditDialog(profile)}><EditIcon /></IconButton>}
-            <IconButton label={profile.active ? 'Switch to another profile before deleting this one' : `Delete ${profile.name}`} danger disabled={profile.active} onClick={() => void removeProfile(profile)}><TrashIcon /></IconButton>
+            <div className="more-menu-wrapper">
+              <IconButton label="More actions" onClick={(e) => { e?.stopPropagation(); setMenuOpen(menuOpen === profile.id ? null : profile.id); }}><MoreIcon /></IconButton>
+              {menuOpen === profile.id && <div className="more-menu">
+                {profile.type === 'api_key' && <button onClick={() => { setMenuOpen(null); void openEditDialog(profile); }}>Edit</button>}
+                <button className={profile.active ? 'disabled' : ''} disabled={profile.active} onClick={() => { setMenuOpen(null); if (!profile.active) void removeProfile(profile); }}>Delete</button>
+              </div>}
+            </div>
           </div>
         </article>)}
       </div>
@@ -378,7 +391,7 @@ function labelForTab(tab: Tab) { return tab[0].toUpperCase() + tab.slice(1); }
 function statusLabel(status: string) { return status === 'local_only' ? 'Local only' : status[0].toUpperCase() + status.slice(1); }
 
 // 图标按钮
-function IconButton({ label, onClick, disabled, danger, children }: { label: string; onClick: () => void; disabled?: boolean; danger?: boolean; children: ReactNode }) {
+function IconButton({ label, onClick, disabled, danger, children }: { label: string; onClick: (event?: React.MouseEvent<HTMLButtonElement>) => void; disabled?: boolean; danger?: boolean; children: ReactNode }) {
   return <button className={`icon-btn${danger ? ' danger' : ''}`} aria-label={label} title={label} disabled={disabled} onClick={onClick}>{children}</button>;
 }
 function RefreshIcon({ spinning }: { spinning?: boolean }) { return <svg className={spinning ? 'spin' : ''} width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path fillRule="evenodd" d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z"/><path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z"/></svg>; }
@@ -388,3 +401,4 @@ function TrashIcon() { return <svg width="16" height="16" fill="currentColor" vi
 function PlusIcon() { return <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path fillRule="evenodd" d="M8 2a.5.5 0 0 1 .5.5v5h5a.5.5 0 0 1 0 1h-5v5a.5.5 0 0 1-1 0v-5h-5a.5.5 0 0 1 0-1h5v-5A.5.5 0 0 1 8 2Z"/></svg>; }
 function CloseIcon() { return <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M2.146 2.854a.5.5 0 1 1 .708-.708L8 7.293l5.146-5.147a.5.5 0 0 1 .708.708L8.707 8l5.147 5.146a.5.5 0 0 1-.708.708L8 8.707l-5.146 5.147a.5.5 0 0 1-.708-.708L7.293 8 2.146 2.854Z"/></svg>; }
 function DownloadIcon() { return <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/><path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708l3 3z"/></svg>; }
+function MoreIcon() { return <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M3 9.5a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zm5 0a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zm5 0a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3z"/></svg>; }
