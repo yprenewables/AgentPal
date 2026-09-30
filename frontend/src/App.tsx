@@ -278,8 +278,13 @@ function AuthenticationTabCompact({ profiles, reload, setNotice }: { profiles: A
         {centralProfiles.map((profile) => {
           const item = syncByName.get(profile.reservedName || profile.name);
           const needsSync = item?.status === 'needs_sync' && !dismissed.includes(item.name);
+          const statusInfo = centralStatusInfo(item, login.loggedIn, syncing, !!item && dismissed.includes(item.name));
           return <article className={`profile-row central ${profile.active ? 'active' : ''}`} key={profile.id}>
-            <div className="profile-main"><strong>{profileTitle(profile)}</strong><small>{profileSummary(profile)}</small><small className={`sync-status sync-${item ? (needsSync ? 'needs_sync' : item.status === 'needs_sync' ? 'kept' : item.status) : 'missing'}`}>{centralStatusText(item, login.loggedIn, syncing, !!item && dismissed.includes(item.name))}</small></div>
+            <div className="profile-main">
+              <strong>{profileTitle(profile)}</strong>
+              <small>{profileSummary(profile)}</small>
+              {statusInfo && <small className={`sync-status sync-${statusInfo.level}`}>{statusInfo.text}</small>}
+            </div>
             <div className="profile-actions">
               {needsSync && <IconButton label="Update from server" onClick={() => void overwrite(item.name)}><DownloadIcon /></IconButton>}
               {needsSync && <IconButton label="Keep local copy" onClick={() => dismissItem(item.name)}><CloseIcon /></IconButton>}
@@ -303,10 +308,10 @@ function AuthenticationTabCompact({ profiles, reload, setNotice }: { profiles: A
         {localProfiles.length === 0 && <div className="empty-inline">No local profiles yet.</div>}
         {localProfiles.map((profile) => <article className={`profile-row ${profile.active ? 'active' : ''}`} key={profile.id}>
           <div className="profile-main"><strong>{profileTitle(profile)}</strong><small>{profileSummary(profile)}</small></div>
-          <div className="profile-actions">
+          <div className="profile-actions inline">
+            {profile.active ? <span className="badge success-badge">Current</span> : <button className="secondary compact" onClick={() => void activate(profile.id)}>Use</button>}
             {profile.type === 'api_key' && <IconButton label={`Edit ${profile.name}`} onClick={() => void openEditDialog(profile)}><EditIcon /></IconButton>}
             <IconButton label={profile.active ? 'Switch to another profile before deleting this one' : `Delete ${profile.name}`} danger disabled={profile.active} onClick={() => void removeProfile(profile)}><TrashIcon /></IconButton>
-            {profile.active ? <span className="badge success-badge">Current</span> : <button className="secondary compact" onClick={() => void activate(profile.id)}>Use</button>}
           </div>
         </article>)}
       </div>
@@ -326,12 +331,12 @@ function isCentralProfile(profile: AuthProfile) {
   return profile.source === 'central_login' || !!profile.reservedName;
 }
 
-function centralStatusText(item: AuthSyncItem | undefined, loggedIn: boolean, syncing: boolean, kept: boolean) {
-  if (!loggedIn) return 'Saved copy · log in to check for server updates';
-  if (!item) return syncing ? 'Checking server...' : 'No longer assigned to this account on the server';
-  if (item.status === 'needs_sync') return kept ? 'Keeping local copy · server version differs' : 'Server has a different version';
-  if (item.status === 'error') return `Server check failed${item.detail ? ` · ${item.detail}` : ''}`;
-  return 'Up to date with server';
+function centralStatusInfo(item: AuthSyncItem | undefined, loggedIn: boolean, syncing: boolean, kept: boolean): { text: string; level: string } | null {
+  if (!loggedIn) return { text: 'Saved copy · log in to check for server updates', level: 'info' };
+  if (!item) return syncing ? { text: 'Checking server...', level: 'info' } : { text: 'No longer assigned to this account on the server', level: 'missing' };
+  if (item.status === 'needs_sync') return kept ? { text: 'Keeping local copy · server version differs', level: 'kept' } : { text: 'Server has a different version', level: 'needs_sync' };
+  if (item.status === 'error') return { text: `Server check failed${item.detail ? ` · ${item.detail}` : ''}`, level: 'error' };
+  return null; // 与服务端一致时不显示状态
 }
 
 function profileTitle(profile: AuthProfile) {
