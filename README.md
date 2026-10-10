@@ -59,24 +59,13 @@ Server 直接读取配置的 Codex 目录。每次清单请求都会重新扫描
 
 中心备份按设备名和档案 ID 存放。上传前请确认网络可信，因为第一版不加密、不登录、不做权限控制。
 
-## 中心登录与预留 profile
+## 中心节点与预留 profile
 
-Central Host 通过 Casdoor（默认 `https://id.yprenew.com`）做 OAuth 登录，OAuth 回调地址为 `{central_host}:{central_port}/callback`，必须在 Casdoor 应用里登记。
+中心节点服务端（含管理后台）已拆分为独立项目 **`agentpal-central`**（`https://github.com/cjb1234567/agentpal-central`）。本仓库（桌面客户端）只通过 HTTP 访问它，不包含任何服务端代码。
 
-服务端启动参数：
+中心节点通过 Casdoor（默认 `https://id.yprenew.com`）做 OAuth 登录，OAuth 回调地址为 `{central_host}:{central_port}/callback`，必须在 Casdoor 应用里登记。服务端启动参数与管理后台说明见 `agentpal-central` 仓库 README。
 
-```text
--casdoor-url         默认 https://id.yprenew.com
--casdoor-client-id   Casdoor 应用 client ID（必填，否则登录接口返回 503）
--casdoor-scopes      默认 "openid profile"
--casdoor-admin-claim 判定管理员的 Casdoor token claim，默认 isAdmin
--casdoor-organization 列出 Casdoor 用户时使用的组织，默认 built-in
--admin-subs          逗号分隔、始终视为管理员的 Casdoor sub 列表（可选）
--oauth-redirect-url  Casdoor 中登记的 Redirect URI
--user-store-dir      默认 ~/.agentpal/server/users
-```
-
-管理员可以用管理页 `/agentpal`（点击登录跳转 Casdoor）维护用户预留 profile，也可以直接放目录（格式如下）：
+管理员可以用中心节点的管理页 `/agentpal`（点击登录跳转 Casdoor）维护用户预留 profile，也可以直接放目录（格式如下）：
 
 管理页的「系统配置」页统一设置 provider 名称、base_url、wire_api、env_key，用于生成所有用户的预留 profile；「Auth Profiles」页直接列出所有用户的预留 profile（用户 sub 为 Casdoor 用户 id），右上角「新增 / 覆盖」按钮弹出对话框，在其中从 Casdoor 用户下拉列表选择关联用户并录入 API Key（类型固定 `api_key`），保存即按系统配置生成/覆盖该用户的预留 profile。Casdoor 不可用时回退为手动填写 sub。系统配置留空时为未配置的默认值：
 
@@ -102,39 +91,9 @@ Central Host 通过 Casdoor（默认 `https://id.yprenew.com`）做 OAuth 登录
 
 > 安全提示：Central Host 只解析 JWT 的 `sub`，不校验签名。任何能访问 Central Host 的客户端都能伪造 `sub` 读取对应用户的 profile。该能力仅适用于可信内网。
 
-## Server API
+## 中心节点 API
 
-```text
-GET  /health
-GET  /v1/config/manifest
-GET  /v1/config/files/skills/<relative-path>
-GET  /v1/config/mcp/<name>
-
-GET    /v1/auth-backups
-POST   /v1/auth-backups/<device>/<profile>?overwrite=true
-GET    /v1/auth-backups/<device>/<profile>
-DELETE /v1/auth-backups/<device>/<profile>
-
-POST /v1/auth/login/start
-GET  /v1/auth/login/status/<loginId>?pollToken=<pollToken>
-GET  /callback
-GET  /v1/auth-profiles
-GET  /v1/auth-profiles/<name>
-
-GET    /v1/admin/users
-GET    /v1/admin/me
-GET    /v1/admin/settings
-PUT    /v1/admin/settings
-GET    /v1/admin/profiles
-GET    /v1/admin/casdoor-users
-GET    /v1/admin/user-profiles/<sub>
-POST   /v1/admin/user-profiles/<sub>
-GET    /v1/admin/user-profiles/<sub>/<name>
-POST   /v1/admin/user-profiles/<sub>/<name>
-DELETE /v1/admin/user-profiles/<sub>/<name>
-```
-
-管理页在 `/agentpal`，使用与客户端相同的 Casdoor 登录流程：点击登录会跳转 Casdoor，回调后自动进入。只有管理员账号可以进入。`/v1/admin/*` 接受两类管理员令牌：带管理员 claim 的 Casdoor 令牌（默认 claim `isAdmin`，可用 `-casdoor-admin-claim` 修改），或 Portal 管理员令牌（`-admin-jwt-public-key`）。两者都未配置时返回 `503`；已登录但非管理员返回 `403`。
+中心节点对客户端暴露的 HTTP 接口（配置清单、认证备份、设备登录、预留 profile）与管理接口（`/v1/admin/*`）均由独立项目 `agentpal-central` 提供，完整列表见其 README。
 
 Server 不在配置清单中发布 `auth.json`。所有路径都会进行安全校验，拒绝绝对路径和路径穿越。
 

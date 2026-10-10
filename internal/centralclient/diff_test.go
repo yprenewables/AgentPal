@@ -4,19 +4,16 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
-	"agentpal/internal/centralnode"
+	"agentpal/internal/centralscan"
 	"agentpal/internal/centraltest"
+	"agentpal/internal/codex"
 	"agentpal/internal/types"
 )
 
 func TestCompareReportsRemoteAndLocalStates(t *testing.T) {
 	dir := centraltest.MakeCodexDir(t)
-	manifest, err := centralnode.BuildManifest(dir, nowUTC())
-	if err != nil {
-		t.Fatal(err)
-	}
+	manifest := buildTestManifest(t, dir)
 	if err := os.MkdirAll(filepath.Join(dir, "skills", "local"), 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -39,4 +36,17 @@ func TestCompareReportsRemoteAndLocalStates(t *testing.T) {
 	}
 }
 
-func nowUTC() time.Time { return time.Date(2026, 9, 21, 12, 0, 0, 0, time.UTC) }
+// buildTestManifest 用客户端侧的扫描逻辑构造中心清单夹具，不依赖服务端代码。
+func buildTestManifest(t *testing.T, dir string) types.CenterManifest {
+	t.Helper()
+	skills, _ := centralscan.ScanSkills(filepath.Join(dir, "skills"), nil)
+	entries, err := codex.ReadMCP(filepath.Join(dir, "config.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	mcp := make([]types.CenterMCP, 0, len(entries))
+	for _, entry := range entries {
+		mcp = append(mcp, types.CenterMCP{Name: entry.Name, SHA256: entry.SHA256, Size: int64(len(entry.TOML))})
+	}
+	return types.CenterManifest{Schema: 1, Skills: skills, MCP: mcp}
+}
