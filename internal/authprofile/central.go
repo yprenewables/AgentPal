@@ -65,6 +65,111 @@ func (s *Store) AddCentral(c CentralProfile) (AuthProfile, error) {
 	return readSavedProfile(dir)
 }
 
+// SyncCentral creates or refreshes a local cache owned by the Central service.
+// Manual profiles are never replaced, even when their display name matches.
+func (s *Store) SyncCentral(c CentralProfile) (AuthProfile, string, error) {
+	if err := validateCentralProfile(c); err != nil {
+		return AuthProfile{}, "error", err
+	}
+	if err := os.MkdirAll(s.Root, 0o700); err != nil {
+		return AuthProfile{}, "error", err
+	}
+	existing, found, err := s.FindByReservedName(c.Name)
+	if err != nil {
+		return AuthProfile{}, "error", err
+	}
+	if !found {
+		// Refuse to shadow a manually managed profile with the same name.
+		profiles, err := s.List()
+		if err != nil {
+			return AuthProfile{}, "error", err
+		}
+		for _, profile := range profiles {
+			if profile.Name == c.Name && profile.Source != "central_login" {
+				return AuthProfile{}, "error", errors.New("a local profile already uses this name")
+			}
+		}
+		profile, err := s.AddCentral(c)
+		if err != nil {
+			return AuthProfile{}, "error", err
+		}
+		return profile, "added", nil
+	}
+	if existing.Source != "central_login" || existing.ReservedName != c.Name {
+		return AuthProfile{}, "error", errors.New("reserved profile name belongs to a non-central profile")
+	}
+	newHash, err := ComputeContentHash(c.AuthJSON, c.ConfigTOML)
+	if err != nil {
+		return AuthProfile{}, "error", err
+	}
+	if existing.ContentHash == newHash {
+		return existing, "synced", nil
+	}
+	updated := existing
+	updated.Name = c.Name
+	updated.Type = c.Type
+	updated.Provider = c.Provider
+	updated.ReservedName = c.Name
+	updated.Source = "central_login"
+	updated.UpdatedAt = time.Now().UTC()
+	dir := filepath.Join(s.Root, existing.ID)
+	parent := filepath.Dir(dir)
+	temp, err := os.MkdirTemp(parent, ".agentpal-central-sync-")
+	if err != nil {
+		return AuthProfile{}, "error", err
+	}
+	defer func() { _ = os.RemoveAll(temp) }()
+	if err := writeProfile(temp, updated, c.AuthJSON, c.ConfigTOML); err != nil {
+		return AuthProfile{}, "error", err
+	}
+	backup := dir + ".agentpal-old"
+	_ = os.RemoveAll(backup)
+	if err := os.Rename(dir, backup); err != nil {
+		return AuthProfile{}, "error", err
+	}
+	if err := os.Rename(temp, dir); err != nil {
+		_ = os.Rename(backup, dir)
+		return AuthProfile{}, "error", err
+	}
+	if err := os.RemoveAll(backup); err != nil {
+		return AuthProfile{}, "error", err
+	}
+	saved, err := readSavedProfile(dir)
+	if err != nil {
+		return AuthProfile{}, "error", err
+	}
+	return saved, "needs_sync", nil
+}
+
+func (s *Store) RemoveCentralProfiles() error {
+	profiles, err := s.List()
+	if err != nil {
+		return err
+	}
+	activeData, err := os.ReadFile(filepath.Join(s.Root, "active.json"))
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	activeID := string(activeData)
+	for _, profile := range profiles {
+		if profile.Source != "central_login" {
+			continue
+		}
+		if err := os.RemoveAll(filepath.Join(s.Root, profile.ID)); err != nil {
+			return err
+		}
+		if profile.ID == activeID {
+			activeID = ""
+		}
+	}
+	if activeID == "" && len(activeData) > 0 {
+		if err := os.Remove(filepath.Join(s.Root, "active.json")); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+	}
+	return nil
+}
+
 func (s *Store) OverwriteCentral(profileID string, c CentralProfile) (AuthProfile, error) {
 	if profileID == "" || filepath.Base(profileID) != profileID || profileID == "." || profileID == ".." {
 		return AuthProfile{}, errors.New("invalid profile ID")

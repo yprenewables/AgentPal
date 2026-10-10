@@ -30,6 +30,31 @@ func TestActivatePreservesMCPAndProjects(t *testing.T) {
 	}
 }
 
+func TestActivateMemoryUserKeyWithoutTrailingNewline(t *testing.T) {
+	codexDir := t.TempDir()
+	_ = os.WriteFile(filepath.Join(codexDir, "config.toml"), []byte("model = \"old\"\nmodel_provider = \"oldp\"\n\n[model_providers.oldp]\nbase_url = \"http://old\"\n"), 0o600)
+	store := NewStore(t.TempDir())
+	profile, err := store.CreateRaw(RawProfileRequest{
+		Name:       "team-proxy",
+		AuthJSON:   `{"OPENAI_API_KEY":"sk-mem-test"}`,
+		ConfigTOML: "model_provider = \"team-proxy\"\n\n[model_providers.team-proxy]\nname = \"team-proxy\"\nbase_url = \"https://memory.example/codex/default\"\nwire_api = \"responses\"",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := store.Activate(codexDir, profile.ID, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !result.OK {
+		t.Fatalf("activation failed: %#v", result)
+	}
+	config, _ := os.ReadFile(filepath.Join(codexDir, "config.toml"))
+	if !strings.Contains(string(config), "experimental_bearer_token = \"sk-mem-test\"") {
+		t.Fatalf("bearer token missing: %s", config)
+	}
+}
+
 func TestActivateStopsBeforeChangingAnythingOnProviderConflict(t *testing.T) {
 	codexDir := t.TempDir()
 	originalAuth := []byte(`{"old":true}`)

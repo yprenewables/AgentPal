@@ -208,13 +208,10 @@ export namespace types {
 		}
 	}
 	export class Bootstrap {
-	    mode: string;
 	    codexDir: string;
 	    centralHost: string;
 	    centralPort: number;
-	    port: number;
 	    deviceName: string;
-	    backupDir: string;
 	    version: string;
 	    restartRequired: boolean;
 	
@@ -224,13 +221,10 @@ export namespace types {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.mode = source["mode"];
 	        this.codexDir = source["codexDir"];
 	        this.centralHost = source["centralHost"];
 	        this.centralPort = source["centralPort"];
-	        this.port = source["port"];
 	        this.deviceName = source["deviceName"];
-	        this.backupDir = source["backupDir"];
 	        this.version = source["version"];
 	        this.restartRequired = source["restartRequired"];
 	    }
@@ -487,6 +481,7 @@ export namespace types {
 		}
 	}
 	export class CurrentAuthStatus {
+	    provider?: string;
 	    apiKeyPreview?: string;
 	    baseUrl?: string;
 	    chatgptUserId?: string;
@@ -501,6 +496,7 @@ export namespace types {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.provider = source["provider"];
 	        this.apiKeyPreview = source["apiKeyPreview"];
 	        this.baseUrl = source["baseUrl"];
 	        this.chatgptUserId = source["chatgptUserId"];
@@ -580,6 +576,8 @@ export namespace types {
 	    provider: string;
 	    providerConflict: boolean;
 	    conflictDescription?: string;
+	    profileProvider?: string;
+	    localProvider?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new ProfileSwitchPreview(source);
@@ -591,6 +589,8 @@ export namespace types {
 	        this.provider = source["provider"];
 	        this.providerConflict = source["providerConflict"];
 	        this.conflictDescription = source["conflictDescription"];
+	        this.profileProvider = source["profileProvider"];
+	        this.localProvider = source["localProvider"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -617,6 +617,8 @@ export namespace types {
 	    backupPath: string;
 	    providerConflict: boolean;
 	    conflictDescription?: string;
+	    profileProvider?: string;
+	    localProvider?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new ProfileSwitchResult(source);
@@ -629,6 +631,8 @@ export namespace types {
 	        this.backupPath = source["backupPath"];
 	        this.providerConflict = source["providerConflict"];
 	        this.conflictDescription = source["conflictDescription"];
+	        this.profileProvider = source["profileProvider"];
+	        this.localProvider = source["localProvider"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -681,13 +685,10 @@ export namespace types {
 	}
 	
 	export class SettingsRequest {
-	    mode: string;
 	    codexDir: string;
 	    centralHost: string;
 	    centralPort: number;
-	    port: number;
 	    deviceName: string;
-	    backupDir: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new SettingsRequest(source);
@@ -695,13 +696,10 @@ export namespace types {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.mode = source["mode"];
 	        this.codexDir = source["codexDir"];
 	        this.centralHost = source["centralHost"];
 	        this.centralPort = source["centralPort"];
-	        this.port = source["port"];
 	        this.deviceName = source["deviceName"];
-	        this.backupDir = source["backupDir"];
 	    }
 	}
 	export class UpdateAsset {

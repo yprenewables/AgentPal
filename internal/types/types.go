@@ -3,25 +3,19 @@ package types
 import "time"
 
 type Bootstrap struct {
-	Mode            string `json:"mode"`
 	CodexDir        string `json:"codexDir"`
 	CentralHost     string `json:"centralHost"`
 	CentralPort     int    `json:"centralPort"`
-	Port            int    `json:"port"`
 	DeviceName      string `json:"deviceName"`
-	BackupDir       string `json:"backupDir"`
 	Version         string `json:"version"`
 	RestartRequired bool   `json:"restartRequired"`
 }
 
 type SettingsRequest struct {
-	Mode        string `json:"mode"`
 	CodexDir    string `json:"codexDir"`
 	CentralHost string `json:"centralHost"`
 	CentralPort int    `json:"centralPort"`
-	Port        int    `json:"port"`
 	DeviceName  string `json:"deviceName"`
-	BackupDir   string `json:"backupDir"`
 }
 
 type ServerOptions struct {
@@ -129,12 +123,16 @@ type ProfileSwitchResult struct {
 	BackupPath          string      `json:"backupPath"`
 	ProviderConflict    bool        `json:"providerConflict"`
 	ConflictDescription string      `json:"conflictDescription,omitempty"`
+	ProfileProvider     string      `json:"profileProvider,omitempty"`
+	LocalProvider       string      `json:"localProvider,omitempty"`
 }
 type ProfileSwitchPreview struct {
 	Profile             AuthProfile `json:"profile"`
 	Provider            string      `json:"provider"`
 	ProviderConflict    bool        `json:"providerConflict"`
 	ConflictDescription string      `json:"conflictDescription,omitempty"`
+	ProfileProvider     string      `json:"profileProvider,omitempty"`
+	LocalProvider       string      `json:"localProvider,omitempty"`
 }
 type AuthProfile struct {
 	ID               string `json:"id"`
@@ -152,6 +150,7 @@ type AuthProfile struct {
 	ContentHash      string `json:"contentHash,omitempty"`
 }
 type CurrentAuthStatus struct {
+	Provider         string `json:"provider,omitempty"`
 	APIKeyPreview    string `json:"apiKeyPreview,omitempty"`
 	BaseURL          string `json:"baseUrl,omitempty"`
 	ChatGPTUserID    string `json:"chatgptUserId,omitempty"`

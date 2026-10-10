@@ -55,7 +55,7 @@ Server 直接读取配置的 Codex 目录。每次清单请求都会重新扫描
   config-auth.toml
 ```
 
-切换档案只更新 `auth.json` 和模型/Provider 相关配置，不覆盖 MCP、Projects 或其他本机配置。切换前会备份当前 `auth.json` 和 `config.toml`。
+切换档案会更新 `auth.json` 和 `model_provider`，并用档案中的 Provider 配置完整覆盖本机同名 Provider；其他 Provider、MCP、Projects 和本机设置保持不变。切换前会备份当前 `auth.json` 和 `config.toml`。
 
 中心备份按设备名和档案 ID 存放。上传前请确认网络可信，因为第一版不加密、不登录、不做权限控制。
 

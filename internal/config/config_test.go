@@ -22,14 +22,11 @@ func TestReadStateReturnsClientDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Mode != "client" || got.CodexDir != "~/.codex" || got.CentralPort != 28888 || got.Port != 28888 {
+	if got.CodexDir != "~/.codex" || got.CentralHost != "127.0.0.1" || got.CentralPort != 28888 {
 		t.Fatalf("unexpected defaults: %#v", got)
 	}
 	if got.DeviceName == "" {
 		t.Fatal("default device name is empty")
-	}
-	if got.BackupDir != "~/.agentpal/server/auth-backups" {
-		t.Fatalf("unexpected backup directory: %q", got.BackupDir)
 	}
 }
 
@@ -44,7 +41,7 @@ func TestReadStateNormalizesMissingNewFieldsAndIgnoresLegacyPeer(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Mode != "client" || got.CentralPort != 28888 || got.Port != 28888 {
+	if got.CentralPort != 28888 {
 		t.Fatalf("missing defaults were not normalized: %#v", got)
 	}
 	if got.CentralHost != "center.local" {
@@ -55,11 +52,10 @@ func TestReadStateNormalizesMissingNewFieldsAndIgnoresLegacyPeer(t *testing.T) {
 func TestWriteStateRoundTripsAndUsesPrivateMode(t *testing.T) {
 	dir := useTempStateDir(t)
 	want := State{
-		Mode:       "server",
-		CodexDir:   "/srv/codex",
-		Port:       30000,
-		DeviceName: "central",
-		BackupDir:  "/srv/backups",
+		CodexDir:    "/tmp/codex",
+		CentralHost: "center.local",
+		CentralPort: 30000,
+		DeviceName:  "mac",
 	}
 	if err := WriteState(want); err != nil {
 		t.Fatal(err)
@@ -75,7 +71,7 @@ func TestWriteStateRoundTripsAndUsesPrivateMode(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Mode != want.Mode || got.CodexDir != want.CodexDir || got.Port != want.Port || got.DeviceName != want.DeviceName || got.BackupDir != want.BackupDir {
+	if got.CodexDir != want.CodexDir || got.CentralHost != want.CentralHost || got.CentralPort != want.CentralPort || got.DeviceName != want.DeviceName {
 		t.Fatalf("round trip mismatch: got %#v want %#v", got, want)
 	}
 	data, err := os.ReadFile(filepath.Join(dir, "config.json"))
@@ -91,25 +87,18 @@ func TestWriteStateRoundTripsAndUsesPrivateMode(t *testing.T) {
 	}
 }
 
-func TestValidateRequiresCenterForClient(t *testing.T) {
-	err := Validate(State{Mode: "client", CodexDir: "~/.codex", CentralPort: 28888, DeviceName: "mac"})
-	if err == nil || err.Error() != "central_host is required in client mode" {
+func TestValidateRequiresCenterHost(t *testing.T) {
+	err := Validate(State{CodexDir: "~/.codex", CentralPort: 28888, DeviceName: "mac"})
+	if err == nil || err.Error() != "central_host is required" {
 		t.Fatalf("got %v", err)
 	}
 }
 
-func TestValidateRequiresServerBackupDirectory(t *testing.T) {
-	err := Validate(State{Mode: "server", CodexDir: "~/.codex", Port: 28888, DeviceName: "center"})
-	if err == nil || err.Error() != "backup_dir is required in server mode" {
-		t.Fatalf("got %v", err)
-	}
-}
-
-func TestValidateRejectsUnknownModeAndInvalidPorts(t *testing.T) {
+func TestValidateRejectsInvalidPorts(t *testing.T) {
 	tests := []State{
-		{Mode: "peer", CodexDir: "~/.codex", DeviceName: "mac"},
-		{Mode: "client", CodexDir: "~/.codex", CentralHost: "center", CentralPort: 70000, DeviceName: "mac"},
-		{Mode: "server", CodexDir: "~/.codex", Port: -1, DeviceName: "center", BackupDir: "/tmp/backups"},
+		{CodexDir: "~/.codex", CentralHost: "center", CentralPort: 70000, DeviceName: "mac"},
+		{CodexDir: "~/.codex", CentralHost: "center", CentralPort: -1, DeviceName: "mac"},
+		{CodexDir: "~/.codex", CentralHost: "center", CentralPort: 0, DeviceName: "mac"},
 	}
 	for _, state := range tests {
 		if err := Validate(state); err == nil {

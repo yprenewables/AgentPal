@@ -177,8 +177,8 @@ DELETE /v1/auth-backups/<device>/<profile>
 2. 校验 JSON/TOML 语法及档案类型所需字段。
 3. 备份当前 `~/.codex/auth.json` 和 `config.toml`。
 4. 将档案中的 `auth.json` 写入临时文件并原子替换目标文件。
-5. 将档案中的认证相关根键和 Provider/模型配置合并到当前 `config.toml`。
-6. 保留 MCP、Projects 和未归入认证范围的本机配置。
+5. 将档案中的认证相关根键写入当前 `config.toml`，并用档案中的 Provider 配置完整替换本机同名 Provider 子树；本机缺少该 Provider 时新增。
+6. 保留其他 Provider、MCP、Projects 和未归入认证范围的本机配置。
 7. 任一步失败时恢复切换前文件，并保持原档案为当前生效档案。
 
 从当前 Codex 配置导入档案时，AgentPal 复制当前认证内容和认证相关配置片段，不移动或修改当前文件。

@@ -21,6 +21,10 @@ func ExtractAuthConfig(path string) ([]byte, AuthSummary, error) {
 	if err != nil {
 		return nil, AuthSummary{}, err
 	}
+	return ExtractAuthConfigFromBytes(data)
+}
+
+func ExtractAuthConfigFromBytes(data []byte) ([]byte, AuthSummary, error) {
 	var root map[string]any
 	if err := toml.Unmarshal(data, &root); err != nil {
 		return nil, AuthSummary{}, err
@@ -69,20 +73,15 @@ func MergeAuthConfig(path string, fragment []byte) error {
 		base = append(base, mergedRoot)
 	}
 	prefix := "model_providers." + provider
-	matchedProvider := false
 	for _, section := range targetSections.tables {
-		if section.name == prefix {
-			base = append(base, ensureProviderName(section.bytes, provider))
-			matchedProvider = true
+		if tableOwnedBy(section.name, prefix) {
 			continue
 		}
 		base = append(base, section.bytes)
 	}
-	if !matchedProvider {
-		for _, section := range source.tables {
-			if tableOwnedBy(section.name, prefix) {
-				base = append(base, section.bytes)
-			}
+	for _, section := range source.tables {
+		if tableOwnedBy(section.name, prefix) {
+			base = append(base, section.bytes)
 		}
 	}
 	return atomicWrite(path, joinSections(base), 0o600)
@@ -114,10 +113,13 @@ func EnsureProviderBearerToken(configPath string, authData []byte) error {
 	sections := splitConfig(data)
 	prefix := "model_providers." + provider
 	for index, section := range sections.tables {
-		if section.name != prefix || strings.Contains(string(section.bytes), "experimental_bearer_token") {
+		if section.name != prefix {
 			continue
 		}
-		section.bytes = append(section.bytes, []byte("experimental_bearer_token = "+strconv.Quote(token)+"\n")...)
+		if strings.Contains(string(section.bytes), "experimental_bearer_token") {
+			return nil
+		}
+		section.bytes = append(ensureTrailingNewline(section.bytes), []byte("experimental_bearer_token = "+strconv.Quote(token)+"\n")...)
 		sections.tables[index] = section
 		return atomicWrite(configPath, joinParsedSections(sections), 0o600)
 	}
@@ -157,51 +159,51 @@ func EnsureProviderBearerTokenInFragment(fragment, authData []byte) ([]byte, err
 				return joinParsedSections(sections), nil
 			}
 		}
-		section.bytes = append(section.bytes, []byte(bearerLine)...)
+		section.bytes = append(ensureTrailingNewline(section.bytes), []byte(bearerLine)...)
 		sections.tables[index] = section
 		return joinParsedSections(sections), nil
 	}
 	return nil, errors.New("model provider table was not found: " + provider)
 }
 
-func CompareProviderConfig(path string, fragment []byte) (bool, string, error) {
+func CompareProviderConfig(path string, fragment []byte) (bool, string, string, string, error) {
 	var root map[string]any
 	if err := toml.Unmarshal(fragment, &root); err != nil {
-		return false, "profile config is invalid", err
+		return false, "profile config is invalid", "", "", err
 	}
 	provider := stringValue(root["model_provider"])
 	if provider == "" {
-		return false, "model_provider is required", errors.New("model_provider is required")
+		return false, "model_provider is required", "", "", errors.New("model_provider is required")
 	}
 	fragment = ensureProviderName(fragment, provider)
 	profileSections := splitConfig(fragment)
 	profileProvider := providerSections(profileSections, "model_providers."+provider)
 	if len(profileProvider) == 0 {
-		return false, "profile Provider table is missing", errors.New("model provider table was not found: " + provider)
+		return false, "profile Provider table is missing", "", "", errors.New("model provider table was not found: " + provider)
 	}
 	target, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
-		return true, "local config.toml is missing", nil
+		return true, "local config.toml is missing; the profile Provider will be added", string(profileProvider), "", nil
 	}
 	if err != nil {
-		return false, "cannot read local config.toml", err
+		return false, "cannot read local config.toml", "", "", err
 	}
 	targetProvider := providerSections(splitConfig(target), "model_providers."+provider)
 	if len(targetProvider) == 0 {
-		return true, "local Provider table is missing: " + provider, nil
+		return true, "local Provider is missing: " + provider + "; the profile Provider will be added", string(profileProvider), "", nil
 	}
 	profileCanonical, err := canonicalTOML(profileProvider)
 	if err != nil {
-		return false, "profile Provider table is invalid", err
+		return false, "profile Provider table is invalid", "", "", err
 	}
 	targetCanonical, err := canonicalTOML(ensureProviderName(targetProvider, provider))
 	if err != nil {
-		return true, "local Provider table is invalid: " + provider, nil
+		return true, "local Provider table is invalid: " + provider, string(profileProvider), string(targetProvider), nil
 	}
 	if string(profileCanonical) != string(targetCanonical) {
-		return true, "local Provider table differs from the profile: " + provider, nil
+		return true, "local Provider differs from the profile and will be replaced: " + provider, string(profileProvider), string(targetProvider), nil
 	}
-	return false, "", nil
+	return false, "", "", "", nil
 }
 
 func providerSections(config parsedConfig, prefix string) []byte {
@@ -243,7 +245,7 @@ func ensureProviderName(data []byte, provider string) []byte {
 				return joinParsedSections(sections)
 			}
 		}
-		section.bytes = []byte(string(section.bytes) + nameLine)
+		section.bytes = append(ensureTrailingNewline(section.bytes), nameLine...)
 		sections.tables[index] = section
 		return joinParsedSections(sections)
 	}

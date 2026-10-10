@@ -15,11 +15,11 @@ func (s *Store) Preview(codexDir, profileID string) (types.ProfileSwitchPreview,
 	if err != nil {
 		return types.ProfileSwitchPreview{}, err
 	}
-	conflict, description, err := codex.CompareProviderConfig(filepath.Join(codexDir, "config.toml"), fragment)
+	conflict, description, profileProvider, localProvider, err := codex.CompareProviderConfig(filepath.Join(codexDir, "config.toml"), fragment)
 	if err != nil {
 		return types.ProfileSwitchPreview{}, err
 	}
-	return types.ProfileSwitchPreview{Profile: types.AuthProfile{ID: p.ID, Name: p.Name, Type: p.Type, Provider: p.Provider, Source: p.Source}, Provider: p.Provider, ProviderConflict: conflict, ConflictDescription: description}, nil
+	return types.ProfileSwitchPreview{Profile: types.AuthProfile{ID: p.ID, Name: p.Name, Type: p.Type, Provider: p.Provider, Source: p.Source}, Provider: p.Provider, ProviderConflict: conflict, ConflictDescription: description, ProfileProvider: profileProvider, LocalProvider: localProvider}, nil
 }
 
 func (s *Store) Activate(codexDir, profileID string, allowProviderConflict ...bool) (types.ProfileSwitchResult, error) {
@@ -28,12 +28,12 @@ func (s *Store) Activate(codexDir, profileID string, allowProviderConflict ...bo
 	if err != nil {
 		return types.ProfileSwitchResult{}, err
 	}
-	conflict, description, err := codex.CompareProviderConfig(filepath.Join(codexDir, "config.toml"), fragment)
+	conflict, description, profileProvider, localProvider, err := codex.CompareProviderConfig(filepath.Join(codexDir, "config.toml"), fragment)
 	if err != nil {
 		return types.ProfileSwitchResult{}, err
 	}
 	if conflict && (len(allowProviderConflict) == 0 || !allowProviderConflict[0]) {
-		return types.ProfileSwitchResult{Profile: types.AuthProfile{ID: p.ID, Name: p.Name, Type: p.Type, Provider: p.Provider, Source: p.Source}, ProviderConflict: true, ConflictDescription: description}, nil
+		return types.ProfileSwitchResult{Profile: types.AuthProfile{ID: p.ID, Name: p.Name, Type: p.Type, Provider: p.Provider, Source: p.Source}, ProviderConflict: true, ConflictDescription: description, ProfileProvider: profileProvider, LocalProvider: localProvider}, nil
 	}
 	auth, err := os.ReadFile(filepath.Join(dir, "auth.json"))
 	if err != nil {
@@ -81,6 +81,57 @@ func (s *Store) Activate(codexDir, profileID string, allowProviderConflict ...bo
 		return types.ProfileSwitchResult{}, err
 	}
 	return types.ProfileSwitchResult{OK: true, Profile: types.AuthProfile{ID: p.ID, Name: p.Name, Type: p.Type, Provider: p.Provider, Source: p.Source, Active: true}, BackupPath: backup}, nil
+}
+
+// ActivateRemote applies a profile fetched directly from the central server without persisting it in the local profile store.
+func ActivateRemote(codexDir string, p AuthProfile, auth, fragment []byte, allowProviderConflict bool) (types.ProfileSwitchResult, error) {
+	conflict, description, profileProvider, localProvider, err := codex.CompareProviderConfig(filepath.Join(codexDir, "config.toml"), fragment)
+	if err != nil {
+		return types.ProfileSwitchResult{}, err
+	}
+	if conflict && !allowProviderConflict {
+		return types.ProfileSwitchResult{Profile: types.AuthProfile{Name: p.Name, Type: p.Type, Provider: p.Provider, Source: p.Source}, ProviderConflict: true, ConflictDescription: description, ProfileProvider: profileProvider, LocalProvider: localProvider}, nil
+	}
+	fragment, err = codex.EnsureProviderBearerTokenInFragment(fragment, auth)
+	if err != nil {
+		return types.ProfileSwitchResult{}, err
+	}
+	var parsed any
+	if err := json.Unmarshal(auth, &parsed); err != nil {
+		return types.ProfileSwitchResult{}, err
+	}
+	root, err := appconfig.BackupRoot()
+	if err != nil {
+		return types.ProfileSwitchResult{}, err
+	}
+	backup := filepath.Join(root, time.Now().Format("20060102-150405.000-auth"))
+	if err := os.MkdirAll(backup, 0o700); err != nil {
+		return types.ProfileSwitchResult{}, err
+	}
+	if err := copyIfExists(filepath.Join(codexDir, "auth.json"), filepath.Join(backup, "auth.json")); err != nil {
+		return types.ProfileSwitchResult{}, err
+	}
+	if err := copyIfExists(filepath.Join(codexDir, "config.toml"), filepath.Join(backup, "config.toml")); err != nil {
+		return types.ProfileSwitchResult{}, err
+	}
+	if err := os.WriteFile(filepath.Join(codexDir, "auth.json.agentpal.tmp"), auth, 0o600); err != nil {
+		return types.ProfileSwitchResult{}, err
+	}
+	if err := os.Rename(filepath.Join(codexDir, "auth.json.agentpal.tmp"), filepath.Join(codexDir, "auth.json")); err != nil {
+		return types.ProfileSwitchResult{}, err
+	}
+	configPath := filepath.Join(codexDir, "config.toml")
+	if err := codex.MergeAuthConfig(configPath, fragment); err != nil {
+		_ = restoreFile(filepath.Join(backup, "auth.json"), filepath.Join(codexDir, "auth.json"))
+		_ = restoreFile(filepath.Join(backup, "config.toml"), configPath)
+		return types.ProfileSwitchResult{}, err
+	}
+	if err := codex.EnsureProviderBearerToken(configPath, auth); err != nil {
+		_ = restoreFile(filepath.Join(backup, "auth.json"), filepath.Join(codexDir, "auth.json"))
+		_ = restoreFile(filepath.Join(backup, "config.toml"), configPath)
+		return types.ProfileSwitchResult{}, err
+	}
+	return types.ProfileSwitchResult{OK: true, Profile: types.AuthProfile{Name: p.Name, Type: p.Type, Provider: p.Provider, Source: p.Source, Active: true}, BackupPath: backup}, nil
 }
 
 func (s *Store) loadProfile(profileID string) (AuthProfile, []byte, error) {

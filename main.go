@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"embed"
 
 	"github.com/wailsapp/wails/v2"
@@ -22,9 +21,8 @@ func main() {
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},
-		OnStartup:  app.startup,
-		OnShutdown: func(ctx context.Context) { app.shutdown() },
-		Bind:       []interface{}{app},
+		OnStartup: app.startup,
+		Bind:      []interface{}{app},
 	})
 	if err != nil {
 		println("Error:", err.Error())

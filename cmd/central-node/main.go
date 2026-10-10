@@ -9,7 +9,7 @@ import (
 	"syscall"
 	"time"
 
-	"agentpal/internal/central"
+	"agentpal/internal/centralnode"
 	"agentpal/internal/codex"
 	"agentpal/internal/constants"
 	"agentpal/internal/types"
@@ -44,7 +44,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	server := central.NewServer(types.ServerOptions{
+	server := centralnode.NewServer(types.ServerOptions{
 		CodexDir:            expandedCodexDir,
 		Port:                *port,
 		AdminJWTIssuer:      *adminIssuer,

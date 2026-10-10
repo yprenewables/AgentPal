@@ -15,7 +15,7 @@ import (
 	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 
 	"agentpal/internal/authprofile"
-	"agentpal/internal/central"
+	"agentpal/internal/centralclient"
 	"agentpal/internal/codex"
 	appconfig "agentpal/internal/config"
 	"agentpal/internal/constants"
@@ -25,8 +25,7 @@ import (
 )
 
 type App struct {
-	ctx           context.Context
-	centralServer *central.Server
+	ctx context.Context
 }
 
 func NewApp() *App {
@@ -42,24 +41,6 @@ func (a *App) startup(ctx context.Context) {
 				_ = codex.EnsureProviderBearerToken(filepath.Join(codexDir, "config.toml"), auth)
 			}
 		}
-	}
-	if err == nil && state.Mode == "server" {
-		codexDir, expandErr := codex.ExpandPath(state.CodexDir)
-		backupDir, backupErr := codex.ExpandPath(state.BackupDir)
-		if expandErr == nil && backupErr == nil {
-			a.centralServer = central.NewServer(types.ServerOptions{CodexDir: codexDir, Port: state.Port})
-			a.centralServer.BackupDir = backupDir
-			_ = a.centralServer.Start()
-		}
-	}
-}
-
-func (a *App) shutdown() {
-	if a.centralServer != nil {
-		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-		defer cancel()
-		_ = a.centralServer.Stop(ctx)
-		a.centralServer = nil
 	}
 }
 
@@ -95,13 +76,10 @@ func (a *App) SaveSettings(req types.SettingsRequest) (types.Bootstrap, error) {
 		return types.Bootstrap{}, err
 	}
 	state := appconfig.State{
-		Mode:        req.Mode,
 		CodexDir:    req.CodexDir,
 		CentralHost: req.CentralHost,
 		CentralPort: req.CentralPort,
-		Port:        req.Port,
 		DeviceName:  req.DeviceName,
-		BackupDir:   req.BackupDir,
 	}
 	if err := appconfig.Validate(state); err != nil {
 		return types.Bootstrap{}, err
@@ -109,7 +87,7 @@ func (a *App) SaveSettings(req types.SettingsRequest) (types.Bootstrap, error) {
 	if err := appconfig.WriteState(state); err != nil {
 		return types.Bootstrap{}, err
 	}
-	restartRequired := previous.Mode != state.Mode || previous.Port != state.Port || previous.CodexDir != state.CodexDir
+	restartRequired := previous.CodexDir != state.CodexDir
 	return bootstrapFromState(state, restartRequired)
 }
 
@@ -119,7 +97,7 @@ func (a *App) RefreshConfiguration() (types.ConfigRefresh, error) {
 		return types.ConfigRefresh{}, err
 	}
 	base := "http://" + state.CentralHost + ":" + strconv.Itoa(state.CentralPort)
-	client := central.NewClient(nil, 6*time.Second)
+	client := centralclient.NewClient(nil, 6*time.Second)
 	manifest, err := client.Manifest(base)
 	if err != nil {
 		return disconnectedRefresh(err.Error()), nil
@@ -128,7 +106,7 @@ func (a *App) RefreshConfiguration() (types.ConfigRefresh, error) {
 	if err != nil {
 		return types.ConfigRefresh{}, err
 	}
-	diff, err := central.Compare(dir, manifest)
+	diff, err := centralclient.Compare(dir, manifest)
 	if err != nil {
 		return types.ConfigRefresh{}, err
 	}
@@ -145,7 +123,7 @@ func (a *App) ApplyConfiguration(req types.ApplyRequest) (types.ApplyResult, err
 		return types.ApplyResult{}, err
 	}
 	base := "http://" + state.CentralHost + ":" + strconv.Itoa(state.CentralPort)
-	manifest, err := central.NewClient(nil, 60*time.Second).Manifest(base)
+	manifest, err := centralclient.NewClient(nil, 60*time.Second).Manifest(base)
 	if err != nil {
 		return types.ApplyResult{}, err
 	}
@@ -153,7 +131,7 @@ func (a *App) ApplyConfiguration(req types.ApplyRequest) (types.ApplyResult, err
 	if err != nil {
 		return types.ApplyResult{}, err
 	}
-	return central.Apply(context.Background(), central.NewClient(nil, 60*time.Second), base, dir, manifest, req.Changes)
+	return centralclient.Apply(context.Background(), centralclient.NewClient(nil, 60*time.Second), base, dir, manifest, req.Changes)
 }
 
 func profileType(p authprofile.AuthProfile) types.AuthProfile {
@@ -170,6 +148,7 @@ func profileTypesFromStore(profiles []authprofile.AuthProfile, current authprofi
 	return result
 }
 
+// ListAuthProfiles returns manual profiles and Central profiles cached locally.
 func (a *App) ListAuthProfiles() ([]types.AuthProfile, error) {
 	state, err := appconfig.ReadState()
 	if err != nil {
@@ -183,13 +162,9 @@ func (a *App) ListAuthProfiles() ([]types.AuthProfile, error) {
 	if err != nil {
 		return nil, err
 	}
-	profiles, err := authprofile.NewStore(root).List()
+	profiles, status, err := authprofile.NewStore(root).ReconcileCurrent(dir)
 	if err != nil {
 		return nil, err
-	}
-	status, statusErr := authprofile.InspectCurrent(dir, profiles)
-	if statusErr != nil {
-		return nil, statusErr
 	}
 	return profileTypesFromStore(profiles, status), nil
 }
@@ -215,7 +190,7 @@ func (a *App) GetCurrentAuthStatus() (types.CurrentAuthStatus, error) {
 	if err != nil {
 		return types.CurrentAuthStatus{}, err
 	}
-	return types.CurrentAuthStatus{APIKeyPreview: status.APIKeyPreview, BaseURL: status.BaseURL, ChatGPTUserID: status.ChatGPTUserID, ChatGPTExpiresAt: status.ChatGPTExpiresAt, APIKeyImported: status.APIKeyImported, ChatGPTImported: status.ChatGPTImported, CurrentProfileID: status.CurrentProfileID}, nil
+	return types.CurrentAuthStatus{Provider: status.Provider, APIKeyPreview: status.APIKeyPreview, BaseURL: status.BaseURL, ChatGPTUserID: status.ChatGPTUserID, ChatGPTExpiresAt: status.ChatGPTExpiresAt, APIKeyImported: status.APIKeyImported, ChatGPTImported: status.ChatGPTImported, CurrentProfileID: status.CurrentProfileID}, nil
 }
 
 func (a *App) ImportCurrentAPIKey(name string) (types.AuthProfile, error) {
@@ -366,7 +341,7 @@ func (a *App) ListRemoteBackups() ([]types.BackupInfo, error) {
 	if err != nil {
 		return nil, err
 	}
-	backups, err := central.NewClient(nil, 6*time.Second).ListBackups(centerBase(state))
+	backups, err := centralclient.NewClient(nil, 6*time.Second).ListBackups(centerBase(state))
 	if err != nil {
 		return nil, err
 	}
@@ -386,7 +361,7 @@ func (a *App) UploadAuthProfile(id string, overwrite bool) error {
 	if err != nil {
 		return err
 	}
-	return central.NewClient(nil, 60*time.Second).UploadBackup(centerBase(state), state.DeviceName, id, bytes.NewReader(archive.Bytes()), overwrite)
+	return centralclient.NewClient(nil, 60*time.Second).UploadBackup(centerBase(state), state.DeviceName, id, bytes.NewReader(archive.Bytes()), overwrite)
 }
 
 func (a *App) RestoreAuthProfile(device, id string) (types.AuthProfile, error) {
@@ -394,7 +369,7 @@ func (a *App) RestoreAuthProfile(device, id string) (types.AuthProfile, error) {
 	if err != nil {
 		return types.AuthProfile{}, err
 	}
-	data, err := central.NewClient(nil, 60*time.Second).DownloadBackup(centerBase(state), device, id)
+	data, err := centralclient.NewClient(nil, 60*time.Second).DownloadBackup(centerBase(state), device, id)
 	if err != nil {
 		return types.AuthProfile{}, err
 	}
@@ -411,7 +386,7 @@ func (a *App) DeleteRemoteBackup(device, id string) error {
 	if err != nil {
 		return err
 	}
-	return central.NewClient(nil, 6*time.Second).DeleteBackup(centerBase(state), device, id)
+	return centralclient.NewClient(nil, 6*time.Second).DeleteBackup(centerBase(state), device, id)
 }
 
 func bootstrapFromState(state appconfig.State, restartRequired bool) (types.Bootstrap, error) {
@@ -419,14 +394,10 @@ func bootstrapFromState(state appconfig.State, restartRequired bool) (types.Boot
 	if err != nil {
 		return types.Bootstrap{}, err
 	}
-	backupDir, err := codex.ExpandPath(state.BackupDir)
-	if err != nil {
-		return types.Bootstrap{}, err
-	}
 	return types.Bootstrap{
-		Mode: state.Mode, CodexDir: codexDir, CentralHost: state.CentralHost,
-		CentralPort: state.CentralPort, Port: state.Port, DeviceName: state.DeviceName,
-		BackupDir: backupDir, Version: constants.AppVersion, RestartRequired: restartRequired,
+		CodexDir: codexDir, CentralHost: state.CentralHost,
+		CentralPort: state.CentralPort, DeviceName: state.DeviceName,
+		Version: constants.AppVersion, RestartRequired: restartRequired,
 	}, nil
 }
 
@@ -486,29 +457,12 @@ func openURLFallback(url string) error {
 	}
 }
 
-func findLocalReserved(profiles []authprofile.AuthProfile, name string) (authprofile.AuthProfile, bool) {
-	for _, profile := range profiles {
-		if profile.ReservedName == name {
-			return profile, true
-		}
-	}
-	return authprofile.AuthProfile{}, false
-}
-
-func centralProfileFrom(detail types.RemoteAuthProfileDetail) authprofile.CentralProfile {
-	authJSON, _ := json.Marshal(detail.Auth)
-	return authprofile.CentralProfile{
-		Name: detail.Name, Provider: detail.Provider, Type: detail.Type,
-		AuthJSON: authJSON, ConfigTOML: []byte(detail.ConfigAuthToml),
-	}
-}
-
 func (a *App) StartCentralLogin() (types.LoginStart, error) {
 	state, err := appconfig.ReadState()
 	if err != nil {
 		return types.LoginStart{}, err
 	}
-	result, err := central.NewClient(nil, 15*time.Second).StartLogin(centerBase(state))
+	result, err := centralclient.NewClient(nil, 15*time.Second).StartLogin(centerBase(state))
 	if err != nil {
 		return types.LoginStart{}, err
 	}
@@ -523,7 +477,7 @@ func (a *App) PollCentralLogin(loginID, pollToken string) (types.LoginStatus, er
 	if err != nil {
 		return types.LoginStatus{}, err
 	}
-	status, err := central.NewClient(nil, 15*time.Second).LoginStatus(centerBase(state), loginID, pollToken)
+	status, err := centralclient.NewClient(nil, 15*time.Second).LoginStatus(centerBase(state), loginID, pollToken)
 	if err != nil {
 		return types.LoginStatus{}, err
 	}
@@ -571,18 +525,11 @@ func (a *App) SyncCentralAuthProfiles() (types.AuthSyncReport, error) {
 	if err != nil {
 		return types.AuthSyncReport{}, err
 	}
-	root, err := appconfig.StateDir()
+	session, err := a.centralLoginSession()
 	if err != nil {
 		return types.AuthSyncReport{}, err
 	}
-	session, err := login.Read(root)
-	if err != nil {
-		return types.AuthSyncReport{}, err
-	}
-	if session.AccessToken == "" || time.Now().After(session.ExpiresAt) {
-		return types.AuthSyncReport{}, errors.New("not logged in")
-	}
-	client := central.NewClient(nil, 15*time.Second)
+	client := centralclient.NewClient(nil, 15*time.Second)
 	base := centerBase(state)
 	remote, err := client.CentralAuthProfiles(base, session.AccessToken)
 	if err != nil {
@@ -592,38 +539,31 @@ func (a *App) SyncCentralAuthProfiles() (types.AuthSyncReport, error) {
 	if err != nil {
 		return types.AuthSyncReport{}, err
 	}
-	store := authprofile.NewStore(profilesRoot)
-	local, err := store.List()
+	codexDir, err := codex.ExpandPath(state.CodexDir)
 	if err != nil {
 		return types.AuthSyncReport{}, err
 	}
+	store := authprofile.NewStore(profilesRoot)
 	report := types.AuthSyncReport{Items: []types.AuthSyncItem{}}
 	for _, item := range remote {
-		existing, found := findLocalReserved(local, item.Name)
-		if !found {
-			detail, err := client.CentralAuthProfile(base, session.AccessToken, item.Name)
-			if err != nil {
-				report.Items = append(report.Items, types.AuthSyncItem{Name: item.Name, Status: "error", Detail: err.Error()})
-				continue
-			}
-			if _, err := store.AddCentral(centralProfileFrom(detail)); err != nil {
-				report.Items = append(report.Items, types.AuthSyncItem{Name: item.Name, Status: "error", Detail: err.Error()})
-				continue
-			}
-			report.Items = append(report.Items, types.AuthSyncItem{Name: item.Name, Status: "added"})
+		detail, err := client.CentralAuthProfile(base, session.AccessToken, item.Name)
+		if err != nil {
+			report.Items = append(report.Items, types.AuthSyncItem{Name: item.Name, Status: "error", Detail: err.Error()})
 			continue
 		}
-		localHash := existing.ContentHash
-		if localHash == "" {
-			if computed, err := store.ContentHashFor(existing.ID); err == nil {
-				localHash = computed
-			}
-		}
-		if localHash != "" && localHash == item.ContentHash {
-			report.Items = append(report.Items, types.AuthSyncItem{Name: item.Name, Status: "synced"})
+		profile, status, err := store.SyncCentral(centralProfileFrom(detail))
+		if err != nil {
+			report.Items = append(report.Items, types.AuthSyncItem{Name: item.Name, Status: "error", Detail: err.Error()})
 			continue
 		}
-		report.Items = append(report.Items, types.AuthSyncItem{Name: item.Name, Status: "needs_sync"})
+		if status == "needs_sync" && profile.Active {
+			if _, err := store.Activate(codexDir, profile.ID, true); err != nil {
+				report.Items = append(report.Items, types.AuthSyncItem{Name: item.Name, Status: "error", Detail: "profile cache updated but active profile could not be applied: " + err.Error()})
+				continue
+			}
+			status = "updated"
+		}
+		report.Items = append(report.Items, types.AuthSyncItem{Name: item.Name, Status: status})
 	}
 	return report, nil
 }
@@ -633,37 +573,65 @@ func (a *App) ApplyCentralAuthProfile(name string) (types.AuthProfile, error) {
 	if err != nil {
 		return types.AuthProfile{}, err
 	}
-	root, err := appconfig.StateDir()
+	session, err := a.centralLoginSession()
 	if err != nil {
 		return types.AuthProfile{}, err
+	}
+	detail, err := centralclient.NewClient(nil, 15*time.Second).CentralAuthProfile(centerBase(state), session.AccessToken, name)
+	if err != nil {
+		return types.AuthProfile{}, err
+	}
+	root, err := codex.ExpandPath("~/.agentpal/auth-profiles")
+	if err != nil {
+		return types.AuthProfile{}, err
+	}
+	dir, err := codex.ExpandPath(state.CodexDir)
+	if err != nil {
+		return types.AuthProfile{}, err
+	}
+	store := authprofile.NewStore(root)
+	profile, status, err := store.SyncCentral(centralProfileFrom(detail))
+	if err != nil {
+		return types.AuthProfile{}, err
+	}
+	if status == "needs_sync" && profile.Active {
+		_, err := store.Activate(dir, profile.ID, true)
+		if err != nil {
+			return types.AuthProfile{}, err
+		}
+		profiles, err := store.List()
+		if err != nil {
+			return types.AuthProfile{}, err
+		}
+		for _, updated := range profiles {
+			if updated.ID == profile.ID {
+				return profileType(updated), nil
+			}
+		}
+		return types.AuthProfile{}, errors.New("updated central profile was not found")
+	}
+	return profileType(profile), nil
+}
+
+func (a *App) centralLoginSession() (login.State, error) {
+	root, err := appconfig.StateDir()
+	if err != nil {
+		return login.State{}, err
 	}
 	session, err := login.Read(root)
 	if err != nil {
-		return types.AuthProfile{}, err
+		return login.State{}, err
 	}
-	if session.AccessToken == "" || time.Now().After(session.ExpiresAt) {
-		return types.AuthProfile{}, errors.New("not logged in")
+	if session.AccessToken == "" || !time.Now().Before(session.ExpiresAt) {
+		return login.State{}, errors.New("not logged in")
 	}
-	profilesRoot, err := codex.ExpandPath("~/.agentpal/auth-profiles")
+	return session, nil
+}
+
+func centralProfileFrom(detail types.RemoteAuthProfileDetail) authprofile.CentralProfile {
+	auth, err := json.Marshal(detail.Auth)
 	if err != nil {
-		return types.AuthProfile{}, err
+		return authprofile.CentralProfile{}
 	}
-	store := authprofile.NewStore(profilesRoot)
-	local, err := store.List()
-	if err != nil {
-		return types.AuthProfile{}, err
-	}
-	existing, found := findLocalReserved(local, name)
-	if !found {
-		return types.AuthProfile{}, errors.New("no local profile for reserved name: " + name)
-	}
-	detail, err := central.NewClient(nil, 15*time.Second).CentralAuthProfile(centerBase(state), session.AccessToken, name)
-	if err != nil {
-		return types.AuthProfile{}, err
-	}
-	updated, err := store.OverwriteCentral(existing.ID, centralProfileFrom(detail))
-	if err != nil {
-		return types.AuthProfile{}, err
-	}
-	return profileType(updated), nil
+	return authprofile.CentralProfile{Name: detail.Name, Type: detail.Type, Provider: detail.Provider, AuthJSON: auth, ConfigTOML: []byte(detail.ConfigAuthToml)}
 }

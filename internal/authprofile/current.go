@@ -14,6 +14,7 @@ import (
 )
 
 type CurrentStatus struct {
+	Provider         string `json:"provider,omitempty"`
 	APIKeyPreview    string `json:"apiKeyPreview,omitempty"`
 	BaseURL          string `json:"baseUrl,omitempty"`
 	ChatGPTUserID    string `json:"chatgptUserId,omitempty"`
@@ -49,7 +50,7 @@ func InspectCurrent(codexDir string, profiles []AuthProfile) (CurrentStatus, err
 		key = findAPIKey(config)
 	}
 	userID := findUserID(auth)
-	status := CurrentStatus{APIKeyPreview: maskAPIKey(key), ChatGPTUserID: userID, ChatGPTExpiresAt: findExpiresAt(auth), BaseURL: baseURLFromConfig(config)}
+	status := CurrentStatus{Provider: providerFromConfig(config), APIKeyPreview: maskAPIKey(key), ChatGPTUserID: userID, ChatGPTExpiresAt: findExpiresAt(auth), BaseURL: baseURLFromConfig(config)}
 	if key != "" {
 		for _, profile := range profiles {
 			if profile.Type == "api_key" && profile.APIKeyPreview == maskAPIKey(key) && strings.EqualFold(profile.Provider, providerFromConfig(config)) && (profile.BaseURL == "" || profile.BaseURL == status.BaseURL) {

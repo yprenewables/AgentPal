@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { api, type ApplyChange, type AuthProfile, type AuthSyncItem, type BackupInfo, type Bootstrap, type ConfigRefresh, type CurrentAuthStatus, type RawProfileContent, type RawProfileRequest, type SettingsRequest } from './wails';
+import { api, type ApplyChange, type AuthProfile, type AuthSyncItem, type BackupInfo, type Bootstrap, type ConfigRefresh, type RawProfileContent, type RawProfileRequest, type SettingsRequest } from './wails';
 
 type Tab = 'configuration' | 'authentication' | 'backups';
 
@@ -10,7 +10,7 @@ export default function App() {
   if (!api) return <main className="shell"><Notice kind="warning">Backend bridge is unavailable. Run AgentPal inside Wails.</Notice></main>;
   if (error) return <main className="shell"><Notice kind="error">{error}</Notice></main>;
   if (!bootstrap) return <main className="shell loading">Loading AgentPal...</main>;
-  return bootstrap.mode === 'server' ? <ServerApp bootstrap={bootstrap} /> : <ClientApp bootstrap={bootstrap} />;
+  return <ClientApp bootstrap={bootstrap} />;
 }
 
 function ClientApp({ bootstrap }: { bootstrap: Bootstrap }) {
@@ -67,12 +67,10 @@ function AuthenticationTab({ profiles, reload, setNotice }: { profiles: AuthProf
 }
 
 function AuthenticationTabCompact({ profiles, reload, setNotice }: { profiles: AuthProfile[]; reload: () => Promise<void>; setNotice: (value: { kind: NoticeKind; text: string } | null) => void }) {
-  const [current, setCurrent] = useState<CurrentAuthStatus | null>(null);
   const [editDialog, setEditDialog] = useState<{ open: boolean; profile?: AuthProfile; name: string; authJson: string; configToml: string }>({ open: false, name: '', authJson: '', configToml: '' });
-  const [confirmAction, setConfirmAction] = useState<{ kind: 'switch' | 'delete'; profile?: AuthProfile; description?: string } | null>(null);
+  const [confirmAction, setConfirmAction] = useState<{ kind: 'switch' | 'delete'; profile?: AuthProfile; description?: string; profileProvider?: string; localProvider?: string } | null>(null);
   const [login, setLogin] = useState<{ loggedIn: boolean; subject?: string; name?: string; displayName?: string; email?: string }>({ loggedIn: false });
   const [syncItems, setSyncItems] = useState<AuthSyncItem[]>([]);
-  const [dismissed, setDismissed] = useState<string[]>([]);
   const [loginBusy, setLoginBusy] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [menuOpen, setMenuOpen] = useState<string | null>(null);
@@ -84,26 +82,23 @@ function AuthenticationTabCompact({ profiles, reload, setNotice }: { profiles: A
     return () => window.removeEventListener('click', closeMenu);
   }, []);
 
-  // 已登录时自动拉取服务端为当前用户维护的 profile，无需手动点击同步。
   useEffect(() => {
+    void reload();
     void api?.GetCentralLoginState().then((state) => {
       setLogin({ loggedIn: state.loggedIn, subject: state.subject, name: state.name, displayName: state.displayName, email: state.email });
-      if (state.loggedIn) void runSync(true);
+      if (state.loggedIn) void syncCentralProfiles();
     }).catch(() => setLogin({ loggedIn: false }));
   }, []);
 
-  // silent=true 用于自动同步：成功时不弹提示，只在新增 profile 或失败时提示。
-  async function runSync(silent = false) {
+  async function syncCentralProfiles() {
     if (!api) return;
     setSyncing(true);
     try {
       const report = await api.SyncCentralAuthProfiles();
       setSyncItems(report.items);
       await reload();
-      const added = report.items.filter((item) => item.status === 'added').length;
-      if (added > 0 && silent) setNotice({ kind: 'success', text: `Added ${added} central profile${added > 1 ? 's' : ''}.` });
     } catch (error) {
-      setNotice({ kind: 'error', text: `Central profile sync failed: ${String(error)}` });
+      setNotice({ kind: 'error', text: `Could not sync central profiles: ${String(error)}` });
     } finally {
       setSyncing(false);
     }
@@ -126,7 +121,7 @@ function AuthenticationTabCompact({ profiles, reload, setNotice }: { profiles: A
         if (status.status === 'approved') {
           setLogin({ loggedIn: true, subject: status.subject, name: status.name, displayName: status.displayName, email: status.email });
           setNotice({ kind: 'success', text: 'Logged in with Casdoor.' });
-          await runSync(true);
+          await syncCentralProfiles();
           return;
         }
         if (status.status === 'failed') {
@@ -147,35 +142,17 @@ function AuthenticationTabCompact({ profiles, reload, setNotice }: { profiles: A
     await api.LogoutCentralLogin();
     setLogin({ loggedIn: false });
     setSyncItems([]);
-    setDismissed([]);
+    await reload();
   }
 
-  async function overwrite(name: string) {
-    if (!api) return;
+  async function updateCentralProfile(name: string) {
+    if (!api || !login.loggedIn) return;
     try {
       await api.ApplyCentralAuthProfile(name);
+      setSyncItems(syncItems.filter((item) => item.name !== name));
       await reload();
-      await runSync(true);
-      setNotice({ kind: 'success', text: `Overwrote local profile ${name} from central.` });
-    } catch (error) {
-      setNotice({ kind: 'error', text: String(error) });
-    }
-  }
-
-  function dismissItem(name: string) {
-    setDismissed([...dismissed, name]);
-  }
-
-  useEffect(() => { void api?.GetCurrentAuthStatus().then(setCurrent).catch(() => setCurrent(null)); }, [profiles]);
-
-  async function importCurrentAPIKey() {
-    if (!api) return;
-    try { await api.ImportCurrentAPIKey('Current API Key'); await reload(); setNotice({ kind: 'success', text: 'Current API Key imported.' }); } catch (error) { setNotice({ kind: 'error', text: String(error) }); }
-  }
-
-  async function importCurrentChatGPT() {
-    if (!api) return;
-    try { await api.ImportCurrentAuth('Current ChatGPT login'); await reload(); setNotice({ kind: 'success', text: 'Current ChatGPT login imported.' }); } catch (error) { setNotice({ kind: 'error', text: String(error) }); }
+      setNotice({ kind: 'success', text: `Updated ${name} from Central.` });
+    } catch (error) { setNotice({ kind: 'error', text: String(error) }); }
   }
 
   async function openCreateDialog() {
@@ -217,7 +194,7 @@ function AuthenticationTabCompact({ profiles, reload, setNotice }: { profiles: A
     try {
       const preview = await api.PreviewAuthProfile(id);
       if (preview.providerConflict) {
-        setConfirmAction({ kind: 'switch', profile: profiles.find((profile) => profile.id === id), description: preview.conflictDescription });
+        setConfirmAction({ kind: 'switch', profile: profiles.find((profile) => profile.id === id), description: preview.conflictDescription, profileProvider: preview.profileProvider, localProvider: preview.localProvider });
         return;
       }
       const result = await api.ActivateAuthProfileWithConflict(id, false);
@@ -253,81 +230,45 @@ function AuthenticationTabCompact({ profiles, reload, setNotice }: { profiles: A
     }
   }
 
-  const hasCurrentProfile = profiles.some((profile) => profile.active);
-  // 中心 profile（登录后由服务端下发并保存到本地）与纯本地 profile 分组展示。
-  const centralProfiles = profiles.filter(isCentralProfile);
-  const localProfiles = profiles.filter((profile) => !isCentralProfile(profile));
   const syncByName = new Map(syncItems.map((item) => [item.name, item]));
-  const centralNames = new Set(centralProfiles.map((profile) => profile.reservedName || profile.name));
-  const centralOnlyItems = syncItems.filter((item) => !centralNames.has(item.name));
   const displayName = login.displayName || login.name || (login.subject && !login.subject.match(/^[0-9a-f-]{36}$/i) ? login.subject : '');
   return <section className="workspace">
     <div className="section-heading">
       <div><h1>Authentication</h1><p>Choose one local API Key or ChatGPT profile.</p></div>
+      <div className="profile-group-actions authentication-actions">
+        {displayName && <span className="central-account">Central account · {displayName}</span>}
+        {login.loggedIn && <><IconButton label={syncing ? 'Refreshing Central profiles' : 'Refresh Central profiles'} disabled={syncing} onClick={() => void syncCentralProfiles()}><RefreshIcon spinning={syncing} /></IconButton><IconButton label="Log out" onClick={() => void logout()}><LogoutIcon /></IconButton></>}
+        {!login.loggedIn && <button className="secondary compact" onClick={() => void startLogin()} disabled={loginBusy}>{loginBusy ? 'Waiting...' : 'Log in to Central'}</button>}
+        <IconButton label="New local profile" onClick={() => void openCreateDialog()}><PlusIcon /></IconButton>
+      </div>
     </div>
-    {!hasCurrentProfile && current?.apiKeyPreview && <div className="current-auth"><div className="current-auth-line"><strong>API KEY: {current.apiKeyPreview}</strong><span>{current.baseUrl || 'base_url not detected'}</span><button className="secondary" onClick={() => void importCurrentAPIKey()}>Import</button></div></div>}
-    {!hasCurrentProfile && !current?.apiKeyPreview && current?.chatgptUserId && <div className="current-auth"><div className="current-auth-line"><strong>ChatGPT User ID: {current.chatgptUserId}</strong><span>expire at: {current.chatgptExpiresAt || 'unknown'}</span><button className="secondary" onClick={() => void importCurrentChatGPT()}>Import</button></div></div>}
-    <section className="profile-group" aria-labelledby="central-profiles-heading">
-      <div className="profile-group-heading">
-        <h2 id="central-profiles-heading">Central profiles{displayName && ` · ${displayName}`}</h2>
-        <div className="profile-group-actions">
-          {login.loggedIn && <><IconButton label={syncing ? 'Refreshing' : 'Refresh central profiles'} disabled={syncing} onClick={() => void runSync()}><RefreshIcon spinning={syncing} /></IconButton><IconButton label="Log out" onClick={() => void logout()}><LogoutIcon /></IconButton></>}
-          {!login.loggedIn && centralProfiles.length > 0 && <button className="primary compact" onClick={() => void startLogin()} disabled={loginBusy}>{loginBusy ? 'Waiting...' : 'Log in'}</button>}
-        </div>
-      </div>
-      {!login.loggedIn && centralProfiles.length === 0 && <div className="empty-state compact">
-        <div className="status-symbol">🔒</div>
-        <h3>Sign in to access central profiles</h3>
-        <p>Server-managed authentication profiles will appear here after login.</p>
-        <button className="primary" onClick={() => void startLogin()} disabled={loginBusy}>{loginBusy ? 'Waiting for login...' : 'Login with Casdoor'}</button>
-      </div>}
-      {(login.loggedIn || centralProfiles.length > 0) && <div className="profile-list">
-        {login.loggedIn && centralProfiles.length === 0 && centralOnlyItems.length === 0 && <div className="empty-inline">{syncing ? 'Loading central profiles...' : 'No profiles are assigned to this account on the server.'}</div>}
-        {centralProfiles.map((profile) => {
-          const item = syncByName.get(profile.reservedName || profile.name);
-          const needsSync = item?.status === 'needs_sync' && !dismissed.includes(item.name);
-          const statusInfo = centralStatusInfo(item, login.loggedIn, syncing, !!item && dismissed.includes(item.name));
-          return <article className={`profile-row central ${profile.active ? 'active' : ''}`} key={profile.id}>
-            <div className="profile-main">
-              <strong>{profileTitle(profile)}</strong>
-              <small>{profileSummary(profile)}</small>
-              {statusInfo && <small className={`sync-status sync-${statusInfo.level}`}>{statusInfo.text}</small>}
-            </div>
-            <div className="profile-actions inline">
-              {needsSync && <IconButton label="Update from server" onClick={() => void overwrite(item.name)}><DownloadIcon /></IconButton>}
-              {needsSync && <IconButton label="Keep local copy" onClick={() => dismissItem(item.name)}><CloseIcon /></IconButton>}
-              {profile.active ? <span className="badge success-badge">Current</span> : <IconButton label={`Use ${profile.name}`} onClick={() => void activate(profile.id)}><CheckCircleIcon /></IconButton>}
-            </div>
-          </article>;
-        })}
-        {centralOnlyItems.map((item) => <article className="profile-row central" key={`remote:${item.name}`}>
-          <div className="profile-main"><strong>{item.name}</strong><small className="sync-status sync-error">Could not load from server{item.detail ? ` · ${item.detail}` : ''}</small></div>
-        </article>)}
-      </div>}
-    </section>
-    <section className="profile-group" aria-labelledby="local-profiles-heading">
-      <div className="profile-group-heading">
-        <h2 id="local-profiles-heading">Local profiles</h2>
-        <div className="profile-group-actions">
-          <IconButton label="New local profile" onClick={() => void openCreateDialog()}><PlusIcon /></IconButton>
-        </div>
-      </div>
+    <section className="profile-group" aria-label="Authentication profiles">
       <div className="profile-list">
-        {localProfiles.length === 0 && <div className="empty-inline">No local profiles yet.</div>}
-        {localProfiles.map((profile) => <article className={`profile-row ${profile.active ? 'active' : ''}`} key={profile.id}>
-          <div className="profile-main"><strong>{profileTitle(profile)}</strong><small>{profileSummary(profile)}</small></div>
+        {profiles.length === 0 && <div className="empty-inline">No local profiles yet.</div>}
+        {profiles.map((profile) => {
+          const syncItem = profile.source === 'central_login' ? syncByName.get(profile.reservedName || profile.name) : undefined;
+          const stale = syncItem?.status === 'needs_sync';
+          return <article className={`profile-row ${profile.active ? 'active' : ''}`} key={profile.id}>
+          <ProfileTypeIcon type={profile.type} />
+          <div className="profile-main"><div className="profile-title-line"><strong>{profileTitle(profile)}</strong>{profile.source === 'central_login' && <span className="source-central"><CloudIcon />Central</span>}</div><small>{profileSummary(profile)}</small>
+            {stale && <small className="sync-status sync-needs_sync">Server has a different version</small>}
+            {syncItem?.status === 'error' && <small className="sync-status sync-error">Server check failed{syncItem.detail ? ` · ${syncItem.detail}` : ''}</small>}
+          </div>
           <div className="profile-actions inline">
+            {syncing && profile.source === 'central_login' && !syncItem && <span className="sync-indicator">Checking…</span>}
+            {stale && login.loggedIn && <IconButton label={`Update ${profile.name} from Central`} onClick={() => void updateCentralProfile(profile.reservedName || profile.name)}><DownloadIcon /></IconButton>}
             {profile.active && <span className="badge success-badge">Current</span>}
             {!profile.active && <IconButton label={`Use ${profile.name}`} onClick={() => void activate(profile.id)}><CheckCircleIcon /></IconButton>}
             <div className="more-menu-wrapper">
               <IconButton label="More actions" onClick={(e) => { e?.stopPropagation(); setMenuOpen(menuOpen === profile.id ? null : profile.id); }}><MoreIcon /></IconButton>
               {menuOpen === profile.id && <div className="more-menu">
-                {profile.type === 'api_key' && <button onClick={() => { setMenuOpen(null); void openEditDialog(profile); }}>Edit</button>}
+                {profile.source !== 'central_login' && profile.type === 'api_key' && <button onClick={() => { setMenuOpen(null); void openEditDialog(profile); }}>Edit</button>}
                 <button className={profile.active ? 'disabled' : ''} disabled={profile.active} onClick={() => { setMenuOpen(null); if (!profile.active) void removeProfile(profile); }}>Delete</button>
               </div>}
             </div>
           </div>
-        </article>)}
+        </article>;
+        })}
       </div>
     </section>
     {editDialog.open && <div className="dialog-backdrop"><div className="dialog wide" role="dialog" aria-modal="true" aria-labelledby="profile-editor-title">
@@ -337,24 +278,12 @@ function AuthenticationTabCompact({ profiles, reload, setNotice }: { profiles: A
       <label className="field"><span>config-auth.toml</span><textarea className="code-editor" spellCheck={false} rows={10} value={editDialog.configToml} onChange={(event) => setEditDialog({ ...editDialog, configToml: event.target.value })} /></label>
       <div className="button-row dialog-actions"><button className="secondary" onClick={() => setEditDialog({ open: false, name: '', authJson: '', configToml: '' })}>Cancel</button><button className="primary" onClick={() => void saveRawProfile()}>{editDialog.profile ? 'Save' : 'Create'}</button></div>
     </div></div>}
-    {confirmAction && <div className="dialog-backdrop"><div className="dialog"><div className="section-heading"><h2>{confirmAction.kind === 'delete' ? 'Delete profile?' : 'Provider configuration differs'}</h2><button className="icon-button" onClick={() => setConfirmAction(null)}>×</button></div><p>{confirmAction.kind === 'delete' ? `Delete ${confirmAction.profile?.name || 'this profile'} and its saved credentials? Remote backups and current credentials will not change.` : `${confirmAction.description || 'The local Provider table differs from this profile.'} Only auth.json and model_provider will change; the local Provider table will be kept.`}</p><div className="button-row"><button className="secondary" onClick={() => setConfirmAction(null)}>Cancel</button><button className={confirmAction.kind === 'delete' ? 'danger' : 'primary'} onClick={() => void confirmActionNow()}>{confirmAction.kind === 'delete' ? 'Delete' : 'Switch profile'}</button></div></div></div>}
+    {confirmAction && <div className="dialog-backdrop"><div className="dialog"><div className="section-heading"><h2>{confirmAction.kind === 'delete' ? 'Delete profile?' : confirmAction.localProvider ? 'Replace local provider?' : 'Add profile provider?'}</h2><button className="icon-button" onClick={() => setConfirmAction(null)}>×</button></div>{confirmAction.kind === 'delete' ? <p>Delete {confirmAction.profile?.name || 'this profile'} and its saved credentials? Remote backups and current credentials will not change.</p> : <div className="provider-diff"><p>{confirmAction.localProvider ? 'Switching profiles will replace the matching local Provider configuration with the Profile Provider configuration. auth.json and model_provider will also be updated. Other local Providers, MCP servers, projects, and settings will be kept.' : 'The Profile Provider is not configured locally. Switching profiles will add it and update auth.json and model_provider. Other local Providers, MCP servers, projects, and settings will be kept.'}</p>{confirmAction.profileProvider && <div className="diff-columns"><div className="diff-column"><strong>Profile Provider (will be applied)</strong><pre>{confirmAction.profileProvider}</pre></div>{confirmAction.localProvider && <div className="diff-column"><strong>Local Provider (will be replaced)</strong><pre>{confirmAction.localProvider}</pre></div>}</div>}</div>}<div className="button-row"><button className="secondary" onClick={() => setConfirmAction(null)}>Cancel</button><button className={confirmAction.kind === 'delete' ? 'danger' : 'primary'} onClick={() => void confirmActionNow()}>{confirmAction.kind === 'delete' ? 'Delete' : 'Switch profile'}</button></div></div></div>}
   </section>;
 }
 
-function isCentralProfile(profile: AuthProfile) {
-  return profile.source === 'central_login' || !!profile.reservedName;
-}
-
-function centralStatusInfo(item: AuthSyncItem | undefined, loggedIn: boolean, syncing: boolean, kept: boolean): { text: string; level: string } | null {
-  if (!loggedIn) return { text: 'Saved copy · log in to check for server updates', level: 'info' };
-  if (!item) return syncing ? { text: 'Checking server...', level: 'info' } : { text: 'No longer assigned to this account on the server', level: 'missing' };
-  if (item.status === 'needs_sync') return kept ? { text: 'Keeping local copy · server version differs', level: 'kept' } : { text: 'Server has a different version', level: 'needs_sync' };
-  if (item.status === 'error') return { text: `Server check failed${item.detail ? ` · ${item.detail}` : ''}`, level: 'error' };
-  return null; // 与服务端一致时不显示状态
-}
-
 function profileTitle(profile: AuthProfile) {
-  if (profile.name === 'Current API Key') return 'API Key';
+  if (profile.name === 'Current API Key') return profile.provider || 'API Key';
   if (profile.name === 'Current ChatGPT login') return 'ChatGPT';
   return profile.name;
 }
@@ -362,10 +291,10 @@ function profileTitle(profile: AuthProfile) {
 function profileSummary(profile: AuthProfile) {
   const config = profile.provider;
   if (profile.type === 'api_key') {
-    return [config, profile.apiKeyPreview, profile.baseUrl || 'no base_url'].filter(Boolean).join(' · ') || 'API Key';
+    return [profile.apiKeyPreview, profile.baseUrl || 'no base_url'].filter(Boolean).join(' · ') || 'API Key';
   }
   const identity = profile.chatgptUserId ? `${profile.chatgptUserId}${profile.chatgptExpiresAt ? ` · expire at: ${profile.chatgptExpiresAt}` : ''}` : 'ChatGPT';
-  return [config, identity].filter(Boolean).join(' · ');
+  return identity;
 }
 
 function BackupsTab({ setNotice }: { setNotice: (value: { kind: NoticeKind; text: string } | null) => void }) {
@@ -378,12 +307,11 @@ function BackupsTab({ setNotice }: { setNotice: (value: { kind: NoticeKind; text
   async function remove(device: string, id: string) { if (!api) return; try { await api.DeleteRemoteBackup(device, id); setNotice({ kind: 'success', text: 'Remote backup deleted.' }); await load(); } catch (error) { setNotice({ kind: 'error', text: String(error) }); } }
   return <section className="workspace"><div className="section-heading"><div><h1>Authentication backups</h1><p>Restore named profiles from the central node when moving between devices.</p></div><button className="secondary" onClick={() => void load()}>Refresh backups</button></div><Notice kind="warning">Authentication backups contain plaintext credentials and are intended only for a trusted local network.</Notice><div className="backup-actions"><strong>Upload a local profile</strong>{profiles.length === 0 && <span className="empty-inline">No local profiles yet.</span>}{profiles.map((profile) => <button className="secondary" key={profile.id} onClick={() => void upload(profile.id)}>{profile.name}</button>)}</div><div className="profile-list">{backups.length === 0 && <div className="empty-inline">No remote backups found.</div>}{backups.map((backup) => <article className="profile-row" key={`${backup.device}:${backup.profile.id}`}><div><strong>{backup.profile.name}</strong><small>{backup.device} · {backup.profile.type} · {backup.profile.provider}</small></div><div className="button-row"><button className="secondary" onClick={() => void restore(backup.device, backup.profile.id)}>Restore</button><button className="danger" onClick={() => void remove(backup.device, backup.profile.id)}>Delete</button></div></article>)}</div></section>;
 }
-function ServerApp({ bootstrap }: { bootstrap: Bootstrap }) { return <main className="shell"><header className="topbar"><div><div className="brand">AgentPal</div><small>Central configuration node</small></div><span className="connection-dot online">● Server running</span></header><section className="workspace server-workspace"><h1>Central node is running</h1><p>Publishing the configured Codex directory over trusted LAN HTTP.</p><div className="server-grid"><div><small>Listen address</small><strong>0.0.0.0:{bootstrap.port}</strong></div><div><small>Published directory</small><strong>{bootstrap.codexDir}</strong></div><div><small>Backup directory</small><strong>{bootstrap.backupDir}</strong></div></div><Notice kind="warning">Authentication backups are plaintext and unauthenticated in this trusted-network mode.</Notice></section><div className="version-status">v{bootstrap.version}</div></main>; }
 function Menu({ bootstrap, onRefresh, onSettings, onClose }: { bootstrap: Bootstrap; onRefresh: () => Promise<void>; onSettings: () => void; onClose: () => void }) { return <div className="menu-popover"><strong>Settings</strong><small>Central node: {bootstrap.centralHost}:{bootstrap.centralPort}</small><button onClick={() => { onSettings(); onClose(); }}>Central and Codex settings</button><button onClick={() => { void onRefresh(); onClose(); }}>Refresh configuration</button><button onClick={() => { void api?.OpenFolder(bootstrap.codexDir); onClose(); }}>Open Codex folder</button></div>; }
 function SettingsDialog({ bootstrap, onClose, setNotice }: { bootstrap: Bootstrap; onClose: () => void; setNotice: (value: { kind: NoticeKind; text: string } | null) => void }) {
-  const [form, setForm] = useState<SettingsRequest>({ mode: bootstrap.mode, codexDir: bootstrap.codexDir, centralHost: bootstrap.centralHost, centralPort: bootstrap.centralPort, port: bootstrap.port, deviceName: bootstrap.deviceName, backupDir: bootstrap.backupDir });
+  const [form, setForm] = useState<SettingsRequest>({ codexDir: bootstrap.codexDir, centralHost: bootstrap.centralHost, centralPort: bootstrap.centralPort, deviceName: bootstrap.deviceName });
   function update<K extends keyof SettingsRequest>(key: K, value: SettingsRequest[K]) { setForm({ ...form, [key]: value }); }
-  async function save() { if (!api) return; try { const result = await api.SaveSettings(form); setNotice({ kind: 'success', text: result.restartRequired ? 'Settings saved. Restart AgentPal to apply the role or server path change.' : 'Settings saved. Refresh to connect with the new center address.' }); onClose(); } catch (error) { setNotice({ kind: 'error', text: String(error) }); } }
+  async function save() { if (!api) return; try { const result = await api.SaveSettings(form); setNotice({ kind: 'success', text: result.restartRequired ? 'Settings saved. Restart AgentPal to apply the Codex directory change.' : 'Settings saved. Refresh to connect with the new center address.' }); onClose(); } catch (error) { setNotice({ kind: 'error', text: String(error) }); } }
   return <div className="dialog-backdrop"><div className="dialog"><div className="section-heading"><h2>AgentPal settings</h2><button className="icon-button" onClick={onClose}>×</button></div><label className="field"><span>Central host</span><input value={form.centralHost} onChange={(event) => update('centralHost', event.target.value)} /></label><label className="field"><span>Central port</span><input type="number" value={form.centralPort} onChange={(event) => update('centralPort', Number(event.target.value))} /></label><label className="field"><span>Codex directory</span><input value={form.codexDir} onChange={(event) => update('codexDir', event.target.value)} /></label><label className="field"><span>Device name</span><input value={form.deviceName} onChange={(event) => update('deviceName', event.target.value)} /></label><div className="button-row"><button className="secondary" onClick={onClose}>Cancel</button><button className="primary" onClick={() => void save()}>Save settings</button></div></div></div>;
 }
 type NoticeKind = 'info' | 'success' | 'warning' | 'error';
@@ -395,6 +323,12 @@ function statusLabel(status: string) { return status === 'local_only' ? 'Local o
 function IconButton({ label, onClick, disabled, danger, children }: { label: string; onClick: (event?: React.MouseEvent<HTMLButtonElement>) => void; disabled?: boolean; danger?: boolean; children: ReactNode }) {
   return <button className={`icon-btn${danger ? ' danger' : ''}`} aria-label={label} title={label} disabled={disabled} onClick={onClick}>{children}</button>;
 }
+function ProfileTypeIcon({ type }: { type: string }) {
+  return <span className="profile-type-icon" aria-hidden="true">{type === 'api_key' ? <KeyIcon /> : <ChatIcon />}</span>;
+}
+function KeyIcon() { return <svg viewBox="0 0 20 20" fill="none"><circle cx="7" cy="8" r="4"/><path d="m10 11 6 6m-2-2 2-2m-4 0 2-2"/></svg>; }
+function ChatIcon() { return <svg viewBox="0 0 20 20" fill="none"><path d="M3 4.5A2.5 2.5 0 0 1 5.5 2h9A2.5 2.5 0 0 1 17 4.5v7a2.5 2.5 0 0 1-2.5 2.5H9l-4.5 3v-3.3A2.5 2.5 0 0 1 3 11.5z"/><path d="M6.5 7h7m-7 3h5"/></svg>; }
+function CloudIcon() { return <svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M4.3 12.5h7.1a2.6 2.6 0 0 0 .2-5.2 3.8 3.8 0 0 0-7.2-.7 3 3 0 0 0-.1 5.9Z"/></svg>; }
 function RefreshIcon({ spinning }: { spinning?: boolean }) { return <svg className={spinning ? 'spin' : ''} width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path fillRule="evenodd" d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z"/><path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z"/></svg>; }
 function LogoutIcon() { return <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path fillRule="evenodd" d="M6 12.5a.5.5 0 0 0 .5.5h8a.5.5 0 0 0 .5-.5v-9a.5.5 0 0 0-.5-.5h-8a.5.5 0 0 0-.5.5v2a.5.5 0 0 1-1 0v-2A1.5 1.5 0 0 1 6.5 2h8A1.5 1.5 0 0 1 16 3.5v9a1.5 1.5 0 0 1-1.5 1.5h-8A1.5 1.5 0 0 1 5 12.5v-2a.5.5 0 0 1 1 0v2z"/><path fillRule="evenodd" d="M.146 8.354a.5.5 0 0 1 0-.708l3-3a.5.5 0 1 1 .708.708L1.707 7.5H10.5a.5.5 0 0 1 0 1H1.707l2.147 2.146a.5.5 0 0 1-.708.708l-3-3z"/></svg>; }
 function EditIcon() { return <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M12.146.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1 0 .708l-10 10a.5.5 0 0 1-.168.11l-5 2a.5.5 0 0 1-.65-.65l2-5a.5.5 0 0 1 .11-.168l10-10zM11.207 2.5 13.5 4.793 14.793 3.5 12.5 1.207 11.207 2.5zm1.586 3L10.5 3.207 4 9.707V10h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.293l6.5-6.5zm-9.761 5.175-.106.106-1.528 3.821 3.821-1.528.106-.106A.5.5 0 0 1 5 12.5V12h-.5a.5.5 0 0 1-.5-.5V11h-.5a.5.5 0 0 1-.468-.325z"/></svg>; }

@@ -4,6 +4,8 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/pelletier/go-toml/v2"
 )
 
 func TestExtractAndMergeAuthConfigPreservesUnrelatedSections(t *testing.T) {
@@ -33,15 +35,18 @@ func TestExtractAndMergeAuthConfigPreservesUnrelatedSections(t *testing.T) {
 	if !containsAll(got, "model = \"old\"", "model_provider = \"corp\"", "model_reasoning_effort = \"low\"", "model_reasoning_summary = \"keep-summary\"", "model_verbosity = \"keep-verbosity\"", "foo = \"keep\"", "[mcp_servers.local]", "[projects.demo]", "[model_providers.oldp]", "[model_providers.unrelated]", "[model_providers.corp.headers]") {
 		t.Fatalf("unexpected merge:\n%s", got)
 	}
-	if !strings.Contains(got, "old-corp") || !strings.Contains(got, "old-team") {
-		t.Fatalf("existing provider subtree was modified:\n%s", got)
+	if !strings.Contains(got, "http://models") || !strings.Contains(got, "platform") {
+		t.Fatalf("profile provider subtree was not applied:\n%s", got)
+	}
+	if strings.Contains(got, "old-corp") || strings.Contains(got, "old-team") {
+		t.Fatalf("local provider subtree was not replaced:\n%s", got)
 	}
 }
 
 func TestCompareProviderConfigDetectsOnlyProviderConflicts(t *testing.T) {
 	fragment := []byte("model = \"profile\"\nmodel_provider = \"corp\"\n\n[model_providers.corp]\nbase_url = \"https://profile.example/v1\"\n\n[model_providers.corp.headers]\nX-Team = \"profile\"\n")
 	target := writeConfig(t, "model = \"local\"\nmodel_provider = \"local\"\n\n[model_providers.corp]\nbase_url = \"https://local.example/v1\"\n\n[model_providers.corp.headers]\nX-Team = \"local\"\n\n[mcp_servers.docs]\ncommand = \"keep\"\n")
-	conflict, description, err := CompareProviderConfig(target, fragment)
+	conflict, description, _, _, err := CompareProviderConfig(target, fragment)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -49,9 +54,31 @@ func TestCompareProviderConfigDetectsOnlyProviderConflicts(t *testing.T) {
 		t.Fatalf("conflict=%v description=%q", conflict, description)
 	}
 	identical := writeConfig(t, "model = \"local\"\nmodel_provider = \"local\"\n\n[model_providers.corp.headers]\nX-Team = \"profile\"\n\n[model_providers.corp]\nbase_url = \"https://profile.example/v1\"\n\n[mcp_servers.docs]\ncommand = \"keep\"\n")
-	conflict, description, err = CompareProviderConfig(identical, fragment)
+	conflict, description, _, _, err = CompareProviderConfig(identical, fragment)
 	if err != nil || conflict || description != "" {
 		t.Fatalf("identical provider reported conflict=%v description=%q err=%v", conflict, description, err)
+	}
+}
+
+func TestMergeAuthConfigReplacesDifferentProviderConfiguration(t *testing.T) {
+	fragment := []byte("model_provider = \"newapi\"\n\n[model_providers.newapi]\nname = \"newapi\"\nbase_url = \"https://profile.example/v1\"\nwire_api = \"responses\"\n")
+	target := writeConfig(t, "model_provider = \"newapi\"\n\n[model_providers.newapi]\nname = \"newapi\"\nbase_url = \"https://local.example/v1\"\nwire_api = \"chat\"\n\n[mcp_servers.keep]\ncommand = \"local\"\n")
+	if err := MergeAuthConfig(target, fragment); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(data)
+	if !strings.Contains(got, "https://profile.example/v1") || !strings.Contains(got, "wire_api = \"responses\"") {
+		t.Fatalf("profile provider was not applied:\n%s", got)
+	}
+	if strings.Contains(got, "https://local.example/v1") || strings.Contains(got, "wire_api = \"chat\"") {
+		t.Fatalf("local provider was kept:\n%s", got)
+	}
+	if !strings.Contains(got, "[mcp_servers.keep]") {
+		t.Fatalf("unrelated config was removed:\n%s", got)
 	}
 }
 
@@ -88,6 +115,57 @@ func TestEnsureProviderBearerTokenAddsMemoryUserKey(t *testing.T) {
 	}
 	if !strings.Contains(string(data), `experimental_bearer_token = "sk-mem-test"`) {
 		t.Fatalf("bearer token missing: %s", data)
+	}
+}
+
+func TestMergeAuthConfigHandlesFragmentWithoutTrailingNewline(t *testing.T) {
+	target := writeConfig(t, "model_provider = \"old\"\n\n[model_providers.old]\nbase_url = \"http://old\"\n")
+	fragment := []byte("model_provider = \"corp\"\n\n[model_providers.corp]\nbase_url = \"http://corp\"")
+	if err := MergeAuthConfig(target, fragment); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var parsed map[string]any
+	if err := toml.Unmarshal(data, &parsed); err != nil {
+		t.Fatalf("merged config is invalid TOML: %v\n%s", err, data)
+	}
+	if !strings.Contains(string(data), "name = \"corp\"") {
+		t.Fatalf("provider name missing: %s", data)
+	}
+}
+
+func TestEnsureProviderBearerTokenHandlesMissingTrailingNewline(t *testing.T) {
+	path := writeConfig(t, "model_provider = \"team-proxy\"\n\n[model_providers.team-proxy]\nname = \"team-proxy\"\nbase_url = \"https://memory.example/codex/default\"\nwire_api = \"responses\"")
+	if err := EnsureProviderBearerToken(path, []byte(`{"OPENAI_API_KEY":"sk-mem-test"}`)); err != nil {
+		t.Fatal(err)
+	}
+	if err := EnsureProviderBearerToken(path, []byte(`{"OPENAI_API_KEY":"sk-mem-test"}`)); err != nil {
+		t.Fatalf("second ensure should be idempotent: %v", err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), "\nwire_api = \"responses\"\nexperimental_bearer_token = \"sk-mem-test\"") {
+		t.Fatalf("bearer token was not placed on its own line: %s", data)
+	}
+}
+
+func TestEnsureProviderBearerTokenIsIdempotentAfterMerge(t *testing.T) {
+	path := writeConfig(t, "model_provider = \"old\"\n\n[model_providers.old]\nbase_url = \"http://old\"\n")
+	fragment := []byte("model_provider = \"team-proxy\"\n\n[model_providers.team-proxy]\nname = \"team-proxy\"\nbase_url = \"https://memory.example/codex/default\"\nwire_api = \"responses\"")
+	got, err := EnsureProviderBearerTokenInFragment(fragment, []byte(`{"OPENAI_API_KEY":"sk-mem-test"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := MergeAuthConfig(path, got); err != nil {
+		t.Fatalf("merge: %v", err)
+	}
+	if err := EnsureProviderBearerToken(path, []byte(`{"OPENAI_API_KEY":"sk-mem-test"}`)); err != nil {
+		t.Fatalf("ensure on merged config: %v", err)
 	}
 }
 
