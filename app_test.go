@@ -98,6 +98,29 @@ func TestListAuthProfilesUpdatesSameNameAndSelectsIt(t *testing.T) {
 	}
 }
 
+func TestListAuthProfilesImportsLocalProfileBesideSameNameCentral(t *testing.T) {
+	app, _, profilesRoot := setupCurrentAuthApp(t, `{"OPENAI_API_KEY":"sk-current-secret"}`, "model_provider = \"corp\"\n\n[model_providers.corp]\nbase_url = \"https://current.example/v1\"\n")
+	_, err := authprofile.NewStore(profilesRoot).AddCentral(authprofile.CentralProfile{
+		Name: "corp", Provider: "corp", Type: "api_key",
+		AuthJSON:   []byte(`{"OPENAI_API_KEY":"sk-central-secret"}`),
+		ConfigTOML: []byte("model_provider = \"corp\"\n\n[model_providers.corp]\nbase_url = \"https://central.example/v1\"\n"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	profiles, err := app.ListAuthProfiles()
+	if err != nil || len(profiles) != 2 {
+		t.Fatalf("profiles=%#v err=%v", profiles, err)
+	}
+	for _, profile := range profiles {
+		if profile.Name == "corp (Local)" && profile.Active {
+			return
+		}
+	}
+	t.Fatalf("active local profile not found: %#v", profiles)
+}
+
 func TestGetCurrentAuthStatusDoesNotImportProfile(t *testing.T) {
 	app, _, profilesRoot := setupCurrentAuthApp(t, `{"OPENAI_API_KEY":"sk-current-secret"}`, "model_provider = \"corp\"\n\n[model_providers.corp]\nbase_url = \"https://corp.example/v1\"\n")
 

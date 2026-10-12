@@ -6,6 +6,9 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
+
+	"github.com/google/uuid"
 )
 
 func writeCurrentAuth(t *testing.T, codexDir, auth, config string) {
@@ -208,7 +211,7 @@ func TestReconcileCurrentReplacesRotatedSameNameProfile(t *testing.T) {
 	}
 }
 
-func TestReconcileCurrentRejectsSameNameCentralProfile(t *testing.T) {
+func TestReconcileCurrentCreatesLocalProfileWhenDefaultNameBelongsToCentral(t *testing.T) {
 	codexDir := t.TempDir()
 	writeCurrentAuth(t, codexDir, `{"OPENAI_API_KEY":"sk-current-secret"}`, "model_provider = \"corp\"\n\n[model_providers.corp]\nbase_url = \"https://current.example/v1\"\n")
 	store := NewStore(t.TempDir())
@@ -218,13 +221,100 @@ func TestReconcileCurrentRejectsSameNameCentralProfile(t *testing.T) {
 	}
 	beforeAuth, beforeConfig, _ := store.GetRawContent(central.ID)
 
-	_, _, err = store.ReconcileCurrent(codexDir)
-	if err == nil || err.Error() != `cannot automatically replace Central profile "corp"` {
-		t.Fatalf("err=%v", err)
+	profiles, status, err := store.ReconcileCurrent(codexDir)
+	if err != nil || len(profiles) != 2 {
+		t.Fatalf("profiles=%#v status=%#v err=%v", profiles, status, err)
+	}
+	var local AuthProfile
+	for _, profile := range profiles {
+		if profile.Name == "corp (Local)" {
+			local = profile
+		}
+	}
+	if local.ID == "" || local.Source == "central_login" || status.CurrentProfileID != local.ID {
+		t.Fatalf("profiles=%#v status=%#v", profiles, status)
 	}
 	afterAuth, afterConfig, _ := store.GetRawContent(central.ID)
 	if beforeAuth != afterAuth || beforeConfig != afterConfig {
 		t.Fatal("Central profile changed")
+	}
+}
+
+func TestReconcileCurrentUpdatesDerivedLocalProfileWithoutDuplicates(t *testing.T) {
+	codexDir := t.TempDir()
+	store := NewStore(t.TempDir())
+	_, err := store.AddCentral(CentralProfile{
+		Name: "corp", Provider: "corp", Type: "api_key",
+		AuthJSON:   []byte(`{"OPENAI_API_KEY":"sk-central-secret"}`),
+		ConfigTOML: []byte("model_provider = \"corp\"\n\n[model_providers.corp]\nbase_url = \"https://central.example/v1\"\n"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeCurrentAuth(t, codexDir, `{"OPENAI_API_KEY":"sk-local-one"}`, "model_provider = \"corp\"\n\n[model_providers.corp]\nbase_url = \"https://local.example/v1\"\n")
+
+	first, firstStatus, err := store.ReconcileCurrent(codexDir)
+	if err != nil || len(first) != 2 {
+		t.Fatalf("profiles=%#v status=%#v err=%v", first, firstStatus, err)
+	}
+	localID := firstStatus.CurrentProfileID
+	second, secondStatus, err := store.ReconcileCurrent(codexDir)
+	if err != nil || len(second) != 2 || secondStatus.CurrentProfileID != localID {
+		t.Fatalf("profiles=%#v status=%#v err=%v", second, secondStatus, err)
+	}
+
+	writeCurrentAuth(t, codexDir, `{"OPENAI_API_KEY":"sk-local-two"}`, "model_provider = \"corp\"\n\n[model_providers.corp]\nbase_url = \"https://rotated.example/v1\"\n")
+	rotated, rotatedStatus, err := store.ReconcileCurrent(codexDir)
+	if err != nil || len(rotated) != 2 || rotatedStatus.CurrentProfileID != localID {
+		t.Fatalf("profiles=%#v status=%#v err=%v", rotated, rotatedStatus, err)
+	}
+	for _, profile := range rotated {
+		if profile.ID == localID && (profile.Name != "corp (Local)" || profile.BaseURL != "https://rotated.example/v1") {
+			t.Fatalf("local profile was not updated in place: %#v", profile)
+		}
+	}
+}
+
+func TestReconcileCurrentRejectsCentralProfileUsingDerivedLocalName(t *testing.T) {
+	codexDir := t.TempDir()
+	writeCurrentAuth(t, codexDir, `{"OPENAI_API_KEY":"sk-current-secret"}`, "model_provider = \"corp\"\n\n[model_providers.corp]\nbase_url = \"https://current.example/v1\"\n")
+	store := NewStore(t.TempDir())
+	_, err := store.AddCentral(CentralProfile{
+		Name: "corp", Provider: "corp", Type: "api_key",
+		AuthJSON:   []byte(`{"OPENAI_API_KEY":"sk-central-secret"}`),
+		ConfigTOML: []byte("model_provider = \"corp\"\n\n[model_providers.corp]\nbase_url = \"https://central.example/v1\"\n"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	derived := AuthProfile{ID: uuid.NewString(), Name: "corp (Local)", Type: "api_key", Provider: "corp", Source: "central_login", ReservedName: "corp-local", CreatedAt: now, UpdatedAt: now}
+	derivedDir := filepath.Join(store.Root, derived.ID)
+	if err := os.MkdirAll(derivedDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeProfile(derivedDir, derived, []byte(`{"OPENAI_API_KEY":"sk-derived-central"}`), []byte("model_provider = \"corp\"\n\n[model_providers.corp]\nbase_url = \"https://derived.example/v1\"\n")); err != nil {
+		t.Fatal(err)
+	}
+	beforeDerivedAuth, beforeDerivedConfig, err := store.GetRawContent(derived.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, _, err = store.ReconcileCurrent(codexDir)
+	if err == nil || err.Error() != `cannot automatically replace Central profile "corp (Local)"` {
+		t.Fatalf("err=%v", err)
+	}
+	afterDerivedAuth, afterDerivedConfig, err := store.GetRawContent(derived.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if beforeDerivedAuth != afterDerivedAuth || beforeDerivedConfig != afterDerivedConfig {
+		t.Fatal("derived Central profile changed")
+	}
+	profiles, err := store.List()
+	if err != nil || len(profiles) != 2 {
+		t.Fatalf("profiles=%#v err=%v", profiles, err)
 	}
 }
 

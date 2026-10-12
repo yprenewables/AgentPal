@@ -68,6 +68,9 @@ func (s *Store) AddCentral(c CentralProfile) (AuthProfile, error) {
 // SyncCentral creates or refreshes a local cache owned by the Central service.
 // Manual profiles are never replaced, even when their display name matches.
 func (s *Store) SyncCentral(c CentralProfile) (AuthProfile, string, error) {
+	reconcileMu.Lock()
+	defer reconcileMu.Unlock()
+
 	if err := validateCentralProfile(c); err != nil {
 		return AuthProfile{}, "error", err
 	}

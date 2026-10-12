@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func centralFixture() CentralProfile {
@@ -13,6 +14,33 @@ func centralFixture() CentralProfile {
 		Type:       "api_key",
 		AuthJSON:   []byte(`{"OPENAI_API_KEY":"sk-central"}`),
 		ConfigTOML: []byte("model_provider = \"yangpu\"\n\n[model_providers.yangpu]\nname = \"yangpu\"\nbase_url = \"https://central.example/v1\"\n"),
+	}
+}
+
+func TestSyncCentralSerializesWithCurrentReconciliation(t *testing.T) {
+	store := NewStore(t.TempDir())
+	reconcileMu.Lock()
+	done := make(chan error, 1)
+	go func() {
+		_, _, err := store.SyncCentral(centralFixture())
+		done <- err
+	}()
+
+	select {
+	case err := <-done:
+		reconcileMu.Unlock()
+		t.Fatalf("SyncCentral bypassed reconciliation lock: %v", err)
+	case <-time.After(50 * time.Millisecond):
+	}
+	reconcileMu.Unlock()
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("SyncCentral did not continue after reconciliation lock was released")
 	}
 }
 

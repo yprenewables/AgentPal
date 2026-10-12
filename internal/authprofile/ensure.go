@@ -135,6 +135,13 @@ func (s *Store) reconcileCurrent(codexDir string, afterWrite func()) ([]AuthProf
 			return profiles, status, nil
 		}
 
+		for _, profile := range profiles {
+			if profile.Name == snapshot.name && profile.Source == "central_login" {
+				snapshot.name += " (Local)"
+				break
+			}
+		}
+
 		var localMatches []AuthProfile
 		for _, profile := range profiles {
 			if profile.Name != snapshot.name {

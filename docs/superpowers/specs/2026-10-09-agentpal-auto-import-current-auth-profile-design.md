@@ -8,7 +8,8 @@
 
 - API Key profile 使用当前 `model_provider` 作为名称。
 - ChatGPT profile 使用当前 ChatGPT User ID 作为名称。
-- 如果列表中已有同名但认证内容不同的 profile，直接更新该 profile，不创建重名记录。
+- 如果列表中已有同名本地 profile 但认证内容不同，直接更新该 profile，不创建重名记录。
+- 如果默认名称与 Central profile 冲突，使用 `<默认名称> (Local)` 保存本地 profile，不覆盖 Central 缓存。
 
 ## 2. 非目标
 
@@ -26,7 +27,7 @@
 2. 检查 Codex 目录中的 `auth.json` 和 `config.toml`。
 3. 将当前 `auth.json` 规范化，并提取当前 provider 的完整认证配置片段，计算内容哈希。
 4. 如果内容哈希与某个 profile 完全一致，直接返回列表，并将该项标记为 `Current`。
-5. 如果当前认证未精确匹配任何 profile，但可以识别为有效 API Key 或 ChatGPT 认证，则自动导入。
+5. 如果当前认证未精确匹配任何 profile，但可以识别为有效 API Key 或 ChatGPT 认证，则自动导入；默认名称与 Central profile 冲突时改用 `<默认名称> (Local)`。
 6. 自动导入完成后重新读取 profile 列表并比较内容哈希。
 7. 以精确匹配得到的 `CurrentProfileID` 标记当前项并返回。
 
@@ -70,7 +71,17 @@
 
 ## 5. 同名覆盖
 
-自动生成的名称已存在，但现有 profile 不匹配当前 Codex 认证时，更新同名 profile，而不是创建重复记录。名称按大小写精确比较。
+自动生成的名称已存在，但现有本地 profile 不匹配当前 Codex 认证时，更新同名 profile，而不是创建重复记录。名称按大小写精确比较。
+
+如果默认名称已被 `source=central_login` 的 Central profile 使用，且内容不匹配当前认证，则 Central profile 保持不变，本地自动导入名称改为 `<默认名称> (Local)`。例如 Central 已有 `memory` 时，当前本地 `memory` 认证保存为 `memory (Local)`。
+
+派生名称的协调规则：
+
+- 已有且仅有一个同名非 Central profile 时，原位更新该 profile。
+- 不存在同名 profile 时，创建新的本地 profile。
+- 派生名称已被 Central profile 使用时返回明确冲突，不覆盖 Central 缓存。
+- 已有多个同名非 Central profile 时返回歧义错误，不随机选择。
+- 重复加载列表时精确内容匹配优先，不创建重复 profile。
 
 更新规则：
 
@@ -79,8 +90,8 @@
 - 更新 `UpdatedAt`。
 - 将 profile 类型、provider 和认证内容更新为当前 Codex 认证。
 - 手动本地 profile 保持本地来源语义。
-- 不自动覆盖 `source=central_login` 的 Central 缓存 profile；如果名称与 Central profile 冲突，则返回明确错误，避免本地自动导入破坏服务端缓存语义。
-- 如果同名匹配中存在任何 Central profile，则始终返回冲突错误。
+- 不自动覆盖 `source=central_login` 的 Central 缓存 profile；默认名称冲突时改用 `<默认名称> (Local)`。
+- 如果派生的 `<默认名称> (Local)` 仍与 Central profile 冲突，则返回明确错误，避免本地自动导入破坏服务端缓存语义。
 - 如果存在多个同名非 Central profile，则返回歧义错误，不随机选择覆盖对象。
 
 写入先在同一父目录创建隐藏临时 profile 目录并完成读取校验，再通过带备份的目录替换提交。提交前失败不修改原 profile；提交过程中失败则尝试恢复并校验原 profile，回滚失败时同时报告原始错误与回滚错误。提交成功后的备份清理失败不回滚有效的新 profile。
@@ -115,7 +126,8 @@
 - 当前认证文件 JSON/TOML 无法解析：列表请求返回解析错误，不写 profile。
 - 自动创建失败：列表请求返回创建错误。
 - 同名本地 profile 更新失败：保留原 profile，并返回更新错误。
-- 同名 Central profile 冲突：不覆盖 Central 缓存，返回明确冲突错误。
+- 默认名称与 Central profile 冲突：保留 Central 缓存，改用 `<默认名称> (Local)` 自动导入。
+- 派生的 `<默认名称> (Local)` 与 Central profile 冲突：不覆盖 Central 缓存，返回明确冲突错误。
 - 自动导入后仍无法匹配：返回错误，避免展示一个已导入但未选中的不一致状态。
 
 ## 8. 测试与验收
@@ -128,7 +140,10 @@
 - 当前认证已有匹配项时，不改写 profile 文件和更新时间。
 - 无有效认证时不创建 profile。
 - API Key 与 ChatGPT token 同时存在时，按 API Key 导入。
-- 同名 Central profile 冲突时不覆盖其内容。
+- 默认名称与 Central profile 冲突时，Central 内容不变，创建 `<默认名称> (Local)` 并选中。
+- 当前本地认证轮换时，原位更新 `<默认名称> (Local)`，保留 ID 且列表数量不增加。
+- 重复加载时不重复创建 `<默认名称> (Local)`。
+- 派生名称与 Central profile 冲突时不覆盖其内容并返回错误。
 - 导入后重新检查仍无法匹配时返回错误。
 
 前端验收：
