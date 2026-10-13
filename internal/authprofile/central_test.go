@@ -180,18 +180,137 @@ func TestSyncCentralUpdatesActiveProfileCache(t *testing.T) {
 	}
 }
 
-func TestSyncCentralNeverOverwritesManualProfile(t *testing.T) {
+func TestSyncCentralConvertsIdenticalSameNameLocalProfile(t *testing.T) {
 	store := NewStore(t.TempDir())
-	manual, err := store.CreateAPIKey(APIKeyRequest{Name: "yangpu", Provider: "openai", BaseURL: "https://local.example/v1", APIKey: "sk-local"})
+	local, err := store.CreateRaw(RawProfileRequest{Name: "yangpu", AuthJSON: string(centralFixture().AuthJSON), ConfigTOML: string(centralFixture().ConfigTOML)})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := store.SyncCentral(centralFixture()); err == nil {
-		t.Fatal("expected a same-name manual profile conflict")
+	if err := store.writeActiveProfileID(local.ID); err != nil {
+		t.Fatal(err)
 	}
-	after, err := readSavedProfile(filepath.Join(store.Root, manual.ID))
-	if err != nil || after.Source != "manual" || after.APIKeyPreview != manual.APIKeyPreview {
-		t.Fatalf("manual profile changed: %#v err=%v", after, err)
+
+	profile, status, err := store.SyncCentral(centralFixture())
+	if err != nil || status != "added" || profile.ID != local.ID || profile.Source != "central_login" || profile.ReservedName != "yangpu" {
+		t.Fatalf("profile=%#v status=%q err=%v", profile, status, err)
+	}
+	profiles, err := store.List()
+	if err != nil || len(profiles) != 1 || !profiles[0].Active {
+		t.Fatalf("profiles=%#v err=%v", profiles, err)
+	}
+}
+
+func TestSyncCentralRenamesDifferentSameNameLocalProfile(t *testing.T) {
+	store := NewStore(t.TempDir())
+	local, err := store.CreateAPIKey(APIKeyRequest{Name: "yangpu", Provider: "yangpu", BaseURL: "https://local.example/v1", APIKey: "sk-local"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	central, status, err := store.SyncCentral(centralFixture())
+	if err != nil || status != "added" || central.Name != "yangpu" {
+		t.Fatalf("central=%#v status=%q err=%v", central, status, err)
+	}
+	profiles, err := store.List()
+	if err != nil || len(profiles) != 2 {
+		t.Fatalf("profiles=%#v err=%v", profiles, err)
+	}
+	for _, profile := range profiles {
+		if profile.ID == local.ID {
+			if profile.Name != "yangpu (Local)" || profile.ContentHash != local.ContentHash || profile.Source != local.Source {
+				t.Fatalf("local profile was not preserved: before=%#v after=%#v", local, profile)
+			}
+			return
+		}
+	}
+	t.Fatalf("renamed local profile not found: %#v", profiles)
+}
+
+func TestSyncCentralRejectsOccupiedLocalSuffixWithoutChanges(t *testing.T) {
+	store := NewStore(t.TempDir())
+	local, err := store.CreateAPIKey(APIKeyRequest{Name: "yangpu", Provider: "yangpu", BaseURL: "https://local.example/v1", APIKey: "sk-local"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	occupied, err := store.CreateAPIKey(APIKeyRequest{Name: "yangpu (Local)", Provider: "other", BaseURL: "https://other.example/v1", APIKey: "sk-other"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, _, err := store.SyncCentral(centralFixture()); err == nil || err.Error() != `profile name "yangpu (Local)" is already in use` {
+		t.Fatalf("err=%v", err)
+	}
+	profiles, err := store.List()
+	if err != nil || len(profiles) != 2 {
+		t.Fatalf("profiles=%#v err=%v", profiles, err)
+	}
+	for _, want := range []AuthProfile{local, occupied} {
+		for _, got := range profiles {
+			if got.ID == want.ID && (got.Name != want.Name || got.ContentHash != want.ContentHash) {
+				t.Fatalf("profile changed: before=%#v after=%#v", want, got)
+			}
+		}
+	}
+}
+
+func TestSyncCentralRejectsMultipleSameNameLocalsWithoutChanges(t *testing.T) {
+	store := NewStore(t.TempDir())
+	first, err := store.CreateAPIKey(APIKeyRequest{Name: "yangpu", Provider: "yangpu", BaseURL: "https://first.example/v1", APIKey: "sk-first"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := store.CreateAPIKey(APIKeyRequest{Name: "yangpu", Provider: "yangpu", BaseURL: "https://second.example/v1", APIKey: "sk-second"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, _, err := store.SyncCentral(centralFixture()); err == nil || err.Error() != `multiple local profiles use Central name "yangpu"` {
+		t.Fatalf("err=%v", err)
+	}
+	profiles, err := store.List()
+	if err != nil || len(profiles) != 2 {
+		t.Fatalf("profiles=%#v err=%v", profiles, err)
+	}
+	for _, want := range []AuthProfile{first, second} {
+		for _, got := range profiles {
+			if got.ID == want.ID && (got.Name != want.Name || got.ContentHash != want.ContentHash) {
+				t.Fatalf("profile changed: before=%#v after=%#v", want, got)
+			}
+		}
+	}
+}
+
+func TestSyncCentralUsesReservedNameWhenCachedDisplayNameIsStale(t *testing.T) {
+	store := NewStore(t.TempDir())
+	central, err := store.AddCentral(centralFixture())
+	if err != nil {
+		t.Fatal(err)
+	}
+	auth, config, err := store.GetRawContent(central.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	central.Name = "stale-name"
+	if err := writeProfile(filepath.Join(store.Root, central.ID), central, []byte(auth), []byte(config)); err != nil {
+		t.Fatal(err)
+	}
+	local, err := store.CreateAPIKey(APIKeyRequest{Name: "yangpu", Provider: "yangpu", BaseURL: "https://local.example/v1", APIKey: "sk-local"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	synced, status, err := store.SyncCentral(centralFixture())
+	if err != nil || status != "synced" || synced.ID != central.ID || synced.Name != "yangpu" {
+		t.Fatalf("synced=%#v status=%q err=%v", synced, status, err)
+	}
+	profiles, err := store.List()
+	if err != nil || len(profiles) != 2 {
+		t.Fatalf("profiles=%#v err=%v", profiles, err)
+	}
+	for _, profile := range profiles {
+		if profile.ID == local.ID && profile.Name != "yangpu (Local)" {
+			t.Fatalf("local profile did not yield the reserved name: %#v", profile)
+		}
 	}
 }
 

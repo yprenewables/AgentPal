@@ -240,6 +240,189 @@ func TestReconcileCurrentCreatesLocalProfileWhenDefaultNameBelongsToCentral(t *t
 	}
 }
 
+func TestReconcileCurrentAfterCentralActivationDoesNotCreateLocalDuplicate(t *testing.T) {
+	codexDir := t.TempDir()
+	writeCurrentAuth(t, codexDir, `{"OPENAI_API_KEY":"sk-old"}`, "model_provider = \"old\"\n\n[model_providers.old]\nbase_url = \"https://old.example/v1\"\n")
+	store := NewStore(t.TempDir())
+	manual, err := store.CreateAPIKey(APIKeyRequest{Name: "Personal corp", Provider: "yangpu", BaseURL: "https://local.example/v1", APIKey: "sk-local"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fixture := centralFixture()
+	fixture.AuthJSON = []byte(`{"OPENAI_API_KEY":"sk-mem-central"}`)
+	central, err := store.AddCentral(fixture)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := store.Activate(codexDir, central.ID, true)
+	if err != nil || !result.OK {
+		t.Fatalf("result=%#v err=%v", result, err)
+	}
+
+	profiles, status, err := store.ReconcileCurrent(codexDir)
+	if err != nil || len(profiles) != 2 || status.CurrentProfileID != central.ID {
+		t.Fatalf("profiles=%#v status=%#v err=%v", profiles, status, err)
+	}
+	foundCentral := false
+	foundManual := false
+	for _, profile := range profiles {
+		if profile.Name == "yangpu (Local)" {
+			t.Fatalf("Central activation created a derived local profile: %#v", profiles)
+		}
+		if profile.ID == central.ID {
+			foundCentral = profile.Source == "central_login"
+		}
+		if profile.ID == manual.ID && (profile.Name != manual.Name || profile.ContentHash != manual.ContentHash) {
+			t.Fatalf("manual profile changed: before=%#v after=%#v", manual, profile)
+		}
+		if profile.ID == manual.ID {
+			foundManual = true
+		}
+	}
+	if !foundCentral || !foundManual {
+		t.Fatalf("expected Central and manual profiles: %#v", profiles)
+	}
+}
+
+func TestReconcileCurrentAfterCentralActivationNormalizesMissingProviderName(t *testing.T) {
+	codexDir := t.TempDir()
+	writeCurrentAuth(t, codexDir, `{"OPENAI_API_KEY":"sk-old"}`, "model_provider = \"old\"\n\n[model_providers.old]\nbase_url = \"https://old.example/v1\"\n")
+	store := NewStore(t.TempDir())
+	fixture := centralFixture()
+	fixture.AuthJSON = []byte(`{"OPENAI_API_KEY":"sk-mem-central"}`)
+	fixture.ConfigTOML = []byte("model_provider = \"yangpu\"\n\n[model_providers.yangpu]\nbase_url = \"https://central.example/v1\"\n")
+	central, err := store.AddCentral(fixture)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Activate(codexDir, central.ID, true); err != nil {
+		t.Fatal(err)
+	}
+
+	profiles, status, err := store.ReconcileCurrent(codexDir)
+	if err != nil || len(profiles) != 1 || status.CurrentProfileID != central.ID {
+		t.Fatalf("profiles=%#v status=%#v err=%v", profiles, status, err)
+	}
+}
+
+func TestReconcileCurrentDoesNotKeepCentralSelectedAfterExternalCredentialChange(t *testing.T) {
+	codexDir := t.TempDir()
+	writeCurrentAuth(t, codexDir, `{"OPENAI_API_KEY":"sk-old"}`, "model_provider = \"old\"\n\n[model_providers.old]\nbase_url = \"https://old.example/v1\"\n")
+	store := NewStore(t.TempDir())
+	fixture := centralFixture()
+	fixture.AuthJSON = []byte(`{"OPENAI_API_KEY":"sk-mem-central"}`)
+	central, err := store.AddCentral(fixture)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Activate(codexDir, central.ID, true); err != nil {
+		t.Fatal(err)
+	}
+	writeCurrentAuth(t, codexDir, `{"OPENAI_API_KEY":"sk-external"}`, "model_provider = \"yangpu\"\n\n[model_providers.yangpu]\nbase_url = \"https://external.example/v1\"\n")
+
+	profiles, status, err := store.ReconcileCurrent(codexDir)
+	if err != nil || len(profiles) != 2 || status.CurrentProfileID == central.ID {
+		t.Fatalf("profiles=%#v status=%#v err=%v", profiles, status, err)
+	}
+	for _, profile := range profiles {
+		if profile.ID == status.CurrentProfileID && (profile.Source == "central_login" || profile.Name != "yangpu (Local)") {
+			t.Fatalf("external credentials were attributed to Central: %#v", profile)
+		}
+	}
+}
+
+func TestReconcileCurrentRepairsLegacyCollisionWithoutCurrentCredentials(t *testing.T) {
+	codexDir := t.TempDir()
+	writeCurrentAuth(t, codexDir, `{}`, "model_provider = \"yangpu\"\n\n[model_providers.yangpu]\nbase_url = \"https://local.example/v1\"\n")
+	store := NewStore(t.TempDir())
+	local, err := store.CreateAPIKey(APIKeyRequest{Name: "yangpu", Provider: "yangpu", BaseURL: "https://local.example/v1", APIKey: "sk-local"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	central, err := store.AddCentral(centralFixture())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	profiles, status, err := store.ReconcileCurrent(codexDir)
+	if err != nil || len(profiles) != 2 || status.CurrentProfileID != "" {
+		t.Fatalf("profiles=%#v status=%#v err=%v", profiles, status, err)
+	}
+	for _, profile := range profiles {
+		switch profile.ID {
+		case local.ID:
+			if profile.Name != "yangpu (Local)" {
+				t.Fatalf("local profile was not renamed: %#v", profile)
+			}
+		case central.ID:
+			if profile.Name != "yangpu" {
+				t.Fatalf("Central profile lost its name: %#v", profile)
+			}
+		}
+	}
+}
+
+func TestReconcileCurrentMergesLegacyIdenticalCentralCollision(t *testing.T) {
+	codexDir := t.TempDir()
+	fixture := centralFixture()
+	writeCurrentAuth(t, codexDir, string(fixture.AuthJSON), string(fixture.ConfigTOML))
+	store := NewStore(t.TempDir())
+	local, err := store.CreateRaw(RawProfileRequest{Name: fixture.Name, AuthJSON: string(fixture.AuthJSON), ConfigTOML: string(fixture.ConfigTOML)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	central, err := store.AddCentral(fixture)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.writeActiveProfileID(local.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	profiles, status, err := store.ReconcileCurrent(codexDir)
+	if err != nil || len(profiles) != 1 || profiles[0].ID != central.ID || status.CurrentProfileID != central.ID || profiles[0].Source != "central_login" {
+		t.Fatalf("profiles=%#v status=%#v err=%v", profiles, status, err)
+	}
+	if _, err := os.Stat(filepath.Join(store.Root, local.ID)); !os.IsNotExist(err) {
+		t.Fatalf("duplicate local profile still exists: %v", err)
+	}
+}
+
+func TestReconcileCurrentRenamesLegacyDifferentCentralCollision(t *testing.T) {
+	codexDir := t.TempDir()
+	store := NewStore(t.TempDir())
+	local, err := store.CreateAPIKey(APIKeyRequest{Name: "yangpu", Provider: "yangpu", BaseURL: "https://local.example/v1", APIKey: "sk-local"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	localAuth, localConfig, err := store.GetRawContent(local.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeCurrentAuth(t, codexDir, localAuth, localConfig)
+	central, err := store.AddCentral(centralFixture())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	profiles, status, err := store.ReconcileCurrent(codexDir)
+	if err != nil || len(profiles) != 2 || status.CurrentProfileID != local.ID {
+		t.Fatalf("profiles=%#v status=%#v err=%v", profiles, status, err)
+	}
+	for _, profile := range profiles {
+		switch profile.ID {
+		case local.ID:
+			if profile.Name != "yangpu (Local)" || profile.ContentHash != local.ContentHash {
+				t.Fatalf("local profile was not preserved: before=%#v after=%#v", local, profile)
+			}
+		case central.ID:
+			if profile.Name != "yangpu" || profile.Source != "central_login" {
+				t.Fatalf("Central profile changed: %#v", profile)
+			}
+		}
+	}
+}
+
 func TestReconcileCurrentUpdatesDerivedLocalProfileWithoutDuplicates(t *testing.T) {
 	codexDir := t.TempDir()
 	store := NewStore(t.TempDir())
@@ -288,7 +471,7 @@ func TestReconcileCurrentRejectsCentralProfileUsingDerivedLocalName(t *testing.T
 		t.Fatal(err)
 	}
 	now := time.Now().UTC()
-	derived := AuthProfile{ID: uuid.NewString(), Name: "corp (Local)", Type: "api_key", Provider: "corp", Source: "central_login", ReservedName: "corp-local", CreatedAt: now, UpdatedAt: now}
+	derived := AuthProfile{ID: uuid.NewString(), Name: "corp (Local)", Type: "api_key", Provider: "corp", Source: "central_login", ReservedName: "corp (Local)", CreatedAt: now, UpdatedAt: now}
 	derivedDir := filepath.Join(store.Root, derived.ID)
 	if err := os.MkdirAll(derivedDir, 0o700); err != nil {
 		t.Fatal(err)

@@ -117,6 +117,22 @@ func (s *Store) reconcileCurrent(codexDir string, afterWrite func()) ([]AuthProf
 		if err != nil {
 			return nil, CurrentStatus{}, err
 		}
+		for _, profile := range profiles {
+			if profile.Source == "central_login" {
+				if err := validateCentralNameOwnership(profiles, centralOwnedName(profile), profile.ContentHash); err != nil {
+					return nil, CurrentStatus{}, err
+				}
+			}
+		}
+		for _, profile := range profiles {
+			if profile.Source != "central_login" {
+				continue
+			}
+			profiles, err = s.reconcileCentralName(profile)
+			if err != nil {
+				return nil, CurrentStatus{}, err
+			}
+		}
 		snapshot, ok, err := readCurrentSnapshot(codexDir)
 		if err != nil {
 			return nil, CurrentStatus{}, err
@@ -134,7 +150,13 @@ func (s *Store) reconcileCurrent(codexDir string, afterWrite func()) ([]AuthProf
 			}
 			return profiles, status, nil
 		}
-
+		centralStatus, err := s.activeCentralStatus(snapshot, profiles)
+		if err != nil {
+			return nil, CurrentStatus{}, err
+		}
+		if centralStatus.CurrentProfileID != "" {
+			return profiles, centralStatus, nil
+		}
 		for _, profile := range profiles {
 			if profile.Name == snapshot.name && profile.Source == "central_login" {
 				snapshot.name += " (Local)"
@@ -213,6 +235,42 @@ func (s *Store) reconcileCurrent(codexDir string, afterWrite func()) ([]AuthProf
 		return profiles, status, nil
 	}
 	return nil, CurrentStatus{}, errors.New("current Codex authentication changed during reconciliation")
+}
+
+func (s *Store) activeCentralStatus(snapshot currentSnapshot, profiles []AuthProfile) (CurrentStatus, error) {
+	activeID, err := activeProfileID(s.Root)
+	if err != nil || activeID == "" {
+		return CurrentStatus{}, err
+	}
+	for _, profile := range profiles {
+		if profile.ID != activeID || profile.Source != "central_login" {
+			continue
+		}
+		auth, config, err := s.GetRawContent(profile.ID)
+		if err != nil {
+			return CurrentStatus{}, err
+		}
+		normalized, err := codex.EnsureProviderBearerTokenInFragment([]byte(config), []byte(auth))
+		if err != nil {
+			return CurrentStatus{}, err
+		}
+		normalized, _, err = codex.ExtractAuthConfigFromBytes(normalized)
+		if err != nil {
+			return CurrentStatus{}, err
+		}
+		hash, err := ComputeContentHash([]byte(auth), normalized)
+		if err != nil {
+			return CurrentStatus{}, err
+		}
+		if hash == snapshot.contentHash {
+			status := snapshot.status
+			status.CurrentProfileID = profile.ID
+			status.APIKeyImported = snapshot.profileType == "api_key"
+			status.ChatGPTImported = snapshot.profileType == "chatgpt"
+			return status, nil
+		}
+	}
+	return CurrentStatus{}, nil
 }
 
 func (s *Store) currentSnapshotRollback(existing *AuthProfile) (func(string) error, error) {

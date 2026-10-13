@@ -121,6 +121,57 @@ func TestListAuthProfilesImportsLocalProfileBesideSameNameCentral(t *testing.T) 
 	t.Fatalf("active local profile not found: %#v", profiles)
 }
 
+func TestListAuthProfilesAfterCentralActivationDoesNotCreateLocalDuplicate(t *testing.T) {
+	app, state, profilesRoot := setupCurrentAuthApp(t, `{"OPENAI_API_KEY":"sk-old"}`, "model_provider = \"old\"\n\n[model_providers.old]\nbase_url = \"https://old.example/v1\"\n")
+	store := authprofile.NewStore(profilesRoot)
+	manual, err := store.CreateAPIKey(authprofile.APIKeyRequest{Name: "Personal memory", Provider: "memory", BaseURL: "https://local.example/v1", APIKey: "sk-local"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	central, err := store.AddCentral(authprofile.CentralProfile{
+		Name: "memory", Provider: "memory", Type: "api_key",
+		AuthJSON:   []byte(`{"OPENAI_API_KEY":"sk-mem-central"}`),
+		ConfigTOML: []byte("model_provider = \"memory\"\n\n[model_providers.memory]\nname = \"memory\"\nbase_url = \"https://memory.example/v1\"\n"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := app.ActivateAuthProfileWithConflict(central.ID, true)
+	if err != nil || !result.OK {
+		t.Fatalf("result=%#v err=%v", result, err)
+	}
+	if _, err := os.Stat(filepath.Join(state.CodexDir, "auth.json")); err != nil {
+		t.Fatal(err)
+	}
+
+	profiles, err := app.ListAuthProfiles()
+	if err != nil || len(profiles) != 2 {
+		t.Fatalf("profiles=%#v err=%v", profiles, err)
+	}
+	foundCentral := false
+	foundManual := false
+	for _, profile := range profiles {
+		if profile.Name == "memory (Local)" {
+			t.Fatalf("Central activation created a derived local profile: %#v", profiles)
+		}
+		if profile.ID == central.ID && (!profile.Active || profile.Source != "central_login") {
+			t.Fatalf("Central profile is not current: %#v", profile)
+		}
+		if profile.ID == central.ID {
+			foundCentral = true
+		}
+		if profile.ID == manual.ID && (profile.Name != manual.Name || profile.ContentHash != manual.ContentHash || profile.Active) {
+			t.Fatalf("manual profile changed: before=%#v after=%#v", manual, profile)
+		}
+		if profile.ID == manual.ID {
+			foundManual = true
+		}
+	}
+	if !foundCentral || !foundManual {
+		t.Fatalf("expected Central and manual profiles: %#v", profiles)
+	}
+}
+
 func TestGetCurrentAuthStatusDoesNotImportProfile(t *testing.T) {
 	app, _, profilesRoot := setupCurrentAuthApp(t, `{"OPENAI_API_KEY":"sk-current-secret"}`, "model_provider = \"corp\"\n\n[model_providers.corp]\nbase_url = \"https://corp.example/v1\"\n")
 

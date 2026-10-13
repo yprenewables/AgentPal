@@ -2,6 +2,7 @@ package authprofile
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"time"
@@ -82,18 +83,18 @@ func (s *Store) SyncCentral(c CentralProfile) (AuthProfile, string, error) {
 		return AuthProfile{}, "error", err
 	}
 	if !found {
-		// Refuse to shadow a manually managed profile with the same name.
-		profiles, err := s.List()
+		converted, rollback, err := s.prepareCentralImport(c)
 		if err != nil {
 			return AuthProfile{}, "error", err
 		}
-		for _, profile := range profiles {
-			if profile.Name == c.Name && profile.Source != "central_login" {
-				return AuthProfile{}, "error", errors.New("a local profile already uses this name")
-			}
+		if converted != nil {
+			return *converted, "added", nil
 		}
 		profile, err := s.AddCentral(c)
 		if err != nil {
+			if rollbackErr := rollback(); rollbackErr != nil {
+				return AuthProfile{}, "error", fmt.Errorf("create Central profile: %w; rollback failed: %v", err, rollbackErr)
+			}
 			return AuthProfile{}, "error", err
 		}
 		return profile, "added", nil
@@ -105,8 +106,34 @@ func (s *Store) SyncCentral(c CentralProfile) (AuthProfile, string, error) {
 	if err != nil {
 		return AuthProfile{}, "error", err
 	}
+	profiles, err := s.List()
+	if err != nil {
+		return AuthProfile{}, "error", err
+	}
+	if err := validateCentralNameOwnership(profiles, c.Name, newHash); err != nil {
+		return AuthProfile{}, "error", err
+	}
 	if existing.ContentHash == newHash {
-		return existing, "synced", nil
+		if existing.Name != c.Name || existing.Type != c.Type || existing.Provider != c.Provider {
+			updated := centralMetadata(existing, c)
+			if err := s.replaceProfile(updated, c.AuthJSON, c.ConfigTOML); err != nil {
+				return AuthProfile{}, "error", err
+			}
+			existing, err = readSavedProfile(filepath.Join(s.Root, existing.ID))
+			if err != nil {
+				return AuthProfile{}, "error", err
+			}
+		}
+		profiles, err := s.reconcileCentralName(existing)
+		if err != nil {
+			return AuthProfile{}, "error", err
+		}
+		for _, profile := range profiles {
+			if profile.ID == existing.ID {
+				return profile, "synced", nil
+			}
+		}
+		return AuthProfile{}, "error", errors.New("Central profile was not found after name reconciliation")
 	}
 	updated := existing
 	updated.Name = c.Name
@@ -115,33 +142,24 @@ func (s *Store) SyncCentral(c CentralProfile) (AuthProfile, string, error) {
 	updated.ReservedName = c.Name
 	updated.Source = "central_login"
 	updated.UpdatedAt = time.Now().UTC()
-	dir := filepath.Join(s.Root, existing.ID)
-	parent := filepath.Dir(dir)
-	temp, err := os.MkdirTemp(parent, ".agentpal-central-sync-")
+	if err := s.replaceProfile(updated, c.AuthJSON, c.ConfigTOML); err != nil {
+		return AuthProfile{}, "error", err
+	}
+	saved, err := readSavedProfile(filepath.Join(s.Root, existing.ID))
 	if err != nil {
 		return AuthProfile{}, "error", err
 	}
-	defer func() { _ = os.RemoveAll(temp) }()
-	if err := writeProfile(temp, updated, c.AuthJSON, c.ConfigTOML); err != nil {
-		return AuthProfile{}, "error", err
-	}
-	backup := dir + ".agentpal-old"
-	_ = os.RemoveAll(backup)
-	if err := os.Rename(dir, backup); err != nil {
-		return AuthProfile{}, "error", err
-	}
-	if err := os.Rename(temp, dir); err != nil {
-		_ = os.Rename(backup, dir)
-		return AuthProfile{}, "error", err
-	}
-	if err := os.RemoveAll(backup); err != nil {
-		return AuthProfile{}, "error", err
-	}
-	saved, err := readSavedProfile(dir)
+	saved.Active = existing.Active
+	profiles, err = s.reconcileCentralName(saved)
 	if err != nil {
 		return AuthProfile{}, "error", err
 	}
-	return saved, "needs_sync", nil
+	for _, profile := range profiles {
+		if profile.ID == saved.ID {
+			return profile, "needs_sync", nil
+		}
+	}
+	return AuthProfile{}, "error", errors.New("Central profile was not found after name reconciliation")
 }
 
 func (s *Store) RemoveCentralProfiles() error {
