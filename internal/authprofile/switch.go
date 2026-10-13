@@ -11,7 +11,7 @@ import (
 )
 
 func (s *Store) Preview(codexDir, profileID string) (types.ProfileSwitchPreview, error) {
-	p, fragment, err := s.loadProfile(profileID)
+	p, _, fragment, err := s.loadProfileForActivation(profileID)
 	if err != nil {
 		return types.ProfileSwitchPreview{}, err
 	}
@@ -23,8 +23,7 @@ func (s *Store) Preview(codexDir, profileID string) (types.ProfileSwitchPreview,
 }
 
 func (s *Store) Activate(codexDir, profileID string, allowProviderConflict ...bool) (types.ProfileSwitchResult, error) {
-	dir := filepath.Join(s.Root, profileID)
-	p, fragment, err := s.loadProfile(profileID)
+	p, auth, fragment, err := s.loadProfileForActivation(profileID)
 	if err != nil {
 		return types.ProfileSwitchResult{}, err
 	}
@@ -34,18 +33,6 @@ func (s *Store) Activate(codexDir, profileID string, allowProviderConflict ...bo
 	}
 	if conflict && (len(allowProviderConflict) == 0 || !allowProviderConflict[0]) {
 		return types.ProfileSwitchResult{Profile: types.AuthProfile{ID: p.ID, Name: p.Name, Type: p.Type, Provider: p.Provider, Source: p.Source}, ProviderConflict: true, ConflictDescription: description, ProfileProvider: profileProvider, LocalProvider: localProvider}, nil
-	}
-	auth, err := os.ReadFile(filepath.Join(dir, "auth.json"))
-	if err != nil {
-		return types.ProfileSwitchResult{}, err
-	}
-	fragment, err = codex.EnsureProviderBearerTokenInFragment(fragment, auth)
-	if err != nil {
-		return types.ProfileSwitchResult{}, err
-	}
-	var parsed any
-	if err := json.Unmarshal(auth, &parsed); err != nil {
-		return types.ProfileSwitchResult{}, err
 	}
 	root, err := appconfig.BackupRoot()
 	if err != nil {
@@ -85,20 +72,20 @@ func (s *Store) Activate(codexDir, profileID string, allowProviderConflict ...bo
 
 // ActivateRemote applies a profile fetched directly from the central server without persisting it in the local profile store.
 func ActivateRemote(codexDir string, p AuthProfile, auth, fragment []byte, allowProviderConflict bool) (types.ProfileSwitchResult, error) {
+	var parsed any
+	if err := json.Unmarshal(auth, &parsed); err != nil {
+		return types.ProfileSwitchResult{}, err
+	}
+	fragment, err := codex.EnsureProviderBearerTokenInFragment(fragment, auth)
+	if err != nil {
+		return types.ProfileSwitchResult{}, err
+	}
 	conflict, description, profileProvider, localProvider, err := codex.CompareProviderConfig(filepath.Join(codexDir, "config.toml"), fragment)
 	if err != nil {
 		return types.ProfileSwitchResult{}, err
 	}
 	if conflict && !allowProviderConflict {
 		return types.ProfileSwitchResult{Profile: types.AuthProfile{Name: p.Name, Type: p.Type, Provider: p.Provider, Source: p.Source}, ProviderConflict: true, ConflictDescription: description, ProfileProvider: profileProvider, LocalProvider: localProvider}, nil
-	}
-	fragment, err = codex.EnsureProviderBearerTokenInFragment(fragment, auth)
-	if err != nil {
-		return types.ProfileSwitchResult{}, err
-	}
-	var parsed any
-	if err := json.Unmarshal(auth, &parsed); err != nil {
-		return types.ProfileSwitchResult{}, err
 	}
 	root, err := appconfig.BackupRoot()
 	if err != nil {
@@ -150,6 +137,27 @@ func (s *Store) loadProfile(profileID string) (AuthProfile, []byte, error) {
 	}
 	return p, fragment, nil
 }
+
+func (s *Store) loadProfileForActivation(profileID string) (AuthProfile, []byte, []byte, error) {
+	p, fragment, err := s.loadProfile(profileID)
+	if err != nil {
+		return AuthProfile{}, nil, nil, err
+	}
+	auth, err := os.ReadFile(filepath.Join(s.Root, profileID, "auth.json"))
+	if err != nil {
+		return AuthProfile{}, nil, nil, err
+	}
+	var parsed any
+	if err := json.Unmarshal(auth, &parsed); err != nil {
+		return AuthProfile{}, nil, nil, err
+	}
+	fragment, err = codex.EnsureProviderBearerTokenInFragment(fragment, auth)
+	if err != nil {
+		return AuthProfile{}, nil, nil, err
+	}
+	return p, auth, fragment, nil
+}
+
 func copyIfExists(src, dst string) error {
 	data, err := os.ReadFile(src)
 	if os.IsNotExist(err) {

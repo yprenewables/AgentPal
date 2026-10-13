@@ -79,3 +79,103 @@ func TestActivateStopsBeforeChangingAnythingOnProviderConflict(t *testing.T) {
 		t.Fatalf("conflict changed local files: auth=%s config=%s", auth, config)
 	}
 }
+
+func TestPreviewNormalizesMemoryProvider(t *testing.T) {
+	codexDir := t.TempDir()
+	_ = os.WriteFile(filepath.Join(codexDir, "config.toml"), []byte("model_provider = \"newapi\"\n\n[model_providers.memory]\nname = \"memory\"\nbase_url = \"https://memory.example/v1\"\nwire_api = \"responses\"\nexperimental_bearer_token = \"sk-mem-test\"\n\n[model_providers.newapi]\nname = \"newapi\"\nbase_url = \"https://newapi.example/v1\"\n"), 0o600)
+	store := NewStore(t.TempDir())
+	memory, err := store.CreateRaw(RawProfileRequest{
+		Name:       "memory",
+		AuthJSON:   `{"OPENAI_API_KEY":"sk-mem-test"}`,
+		ConfigTOML: "model_provider = \"memory\"\n\n[model_providers.memory]\nname = \"memory\"\nbase_url = \"https://memory.example/v1\"\nwire_api = \"responses\"\n",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	preview, err := store.Preview(codexDir, memory.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if preview.ProviderConflict {
+		t.Fatalf("normalized Provider should match local config: %#v", preview)
+	}
+}
+
+func TestPreviewTreatsMissingOrDifferentMemoryTokenAsConflict(t *testing.T) {
+	profileConfig := "model_provider = \"memory\"\n\n[model_providers.memory]\nname = \"memory\"\nbase_url = \"https://memory.example/v1\"\nwire_api = \"responses\"\n"
+	store := NewStore(t.TempDir())
+	memory, err := store.CreateRaw(RawProfileRequest{Name: "memory", AuthJSON: `{"OPENAI_API_KEY":"sk-mem-test"}`, ConfigTOML: profileConfig})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, test := range []struct {
+		name     string
+		provider string
+	}{
+		{name: "missing token", provider: profileConfig},
+		{name: "different token", provider: profileConfig + "experimental_bearer_token = \"sk-mem-other\"\n"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			codexDir := t.TempDir()
+			if err := os.WriteFile(filepath.Join(codexDir, "config.toml"), []byte(test.provider), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			preview, err := store.Preview(codexDir, memory.ID)
+			if err != nil || !preview.ProviderConflict {
+				t.Fatalf("preview=%#v err=%v", preview, err)
+			}
+		})
+	}
+}
+
+func TestPreviewAfterMemoryNewAPIMemoryRoundTrip(t *testing.T) {
+	codexDir := t.TempDir()
+	_ = os.WriteFile(filepath.Join(codexDir, "auth.json"), []byte(`{"OPENAI_API_KEY":"sk-old"}`), 0o600)
+	_ = os.WriteFile(filepath.Join(codexDir, "config.toml"), []byte("model_provider = \"memory\"\n\n[model_providers.memory]\nname = \"memory\"\nbase_url = \"https://old.example/v1\"\nwire_api = \"responses\"\n"), 0o600)
+	store := NewStore(t.TempDir())
+	memory, err := store.CreateRaw(RawProfileRequest{
+		Name:       "memory",
+		AuthJSON:   `{"OPENAI_API_KEY":"sk-mem-test"}`,
+		ConfigTOML: "model_provider = \"memory\"\n\n[model_providers.memory]\nname = \"memory\"\nbase_url = \"https://memory.example/v1\"\nwire_api = \"responses\"\n",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	newAPI, err := store.CreateAPIKey(APIKeyRequest{Name: "newapi", Provider: "newapi", BaseURL: "https://newapi.example/v1", APIKey: "sk-newapi"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	first, err := store.Preview(codexDir, memory.ID)
+	if err != nil || !first.ProviderConflict {
+		t.Fatalf("first preview=%#v err=%v", first, err)
+	}
+	if _, err := store.Activate(codexDir, memory.ID, true); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Activate(codexDir, newAPI.ID, true); err != nil {
+		t.Fatal(err)
+	}
+	second, err := store.Preview(codexDir, memory.ID)
+	if err != nil || second.ProviderConflict {
+		t.Fatalf("second preview=%#v err=%v", second, err)
+	}
+}
+
+func TestActivateRemoteNormalizesMemoryProviderBeforeComparison(t *testing.T) {
+	t.Setenv("AGENTPAL_CONFIG_DIR", t.TempDir())
+	codexDir := t.TempDir()
+	auth := []byte(`{"OPENAI_API_KEY":"sk-mem-test"}`)
+	fragment := []byte("model_provider = \"memory\"\n\n[model_providers.memory]\nname = \"memory\"\nbase_url = \"https://memory.example/v1\"\nwire_api = \"responses\"\n")
+	local := "model_provider = \"newapi\"\n\n[model_providers.memory]\nname = \"memory\"\nbase_url = \"https://memory.example/v1\"\nwire_api = \"responses\"\nexperimental_bearer_token = \"sk-mem-test\"\n\n[model_providers.newapi]\nname = \"newapi\"\nbase_url = \"https://newapi.example/v1\"\n"
+	if err := os.WriteFile(filepath.Join(codexDir, "config.toml"), []byte(local), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := ActivateRemote(codexDir, AuthProfile{Name: "memory", Type: "api_key", Provider: "memory", Source: "central_login"}, auth, fragment, false)
+	if err != nil || !result.OK || result.ProviderConflict {
+		t.Fatalf("result=%#v err=%v", result, err)
+	}
+}
