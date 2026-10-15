@@ -78,6 +78,7 @@ function AuthenticationTabCompact({ profiles, reload, setNotice }: { profiles: A
   const [syncItems, setSyncItems] = useState<AuthSyncItem[]>([]);
   const [loginBusy, setLoginBusy] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [updating, setUpdating] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState<string | null>(null);
 
   // 点击页面其他位置时关闭行内「更多」菜单。
@@ -151,13 +152,15 @@ function AuthenticationTabCompact({ profiles, reload, setNotice }: { profiles: A
   }
 
   async function updateCentralProfile(name: string) {
-    if (!api || !login.loggedIn) return;
+    if (!api || !login.loggedIn || updating) return;
+    setUpdating(name);
     try {
       await api.ApplyCentralAuthProfile(name);
-      setSyncItems(syncItems.filter((item) => item.name !== name));
+      setSyncItems((items) => items.filter((item) => item.name !== name));
       await reload();
       setNotice({ kind: 'success', text: `Updated ${name} from Central.` });
     } catch (error) { setNotice({ kind: 'error', text: String(error) }); }
+    finally { setUpdating(null); }
   }
 
   async function openCreateDialog() {
@@ -256,12 +259,12 @@ function AuthenticationTabCompact({ profiles, reload, setNotice }: { profiles: A
           return <article className={`profile-row ${profile.active ? 'active' : ''}`} key={profile.id}>
           <ProfileTypeIcon type={profile.type} />
           <div className="profile-main"><div className="profile-title-line"><strong>{profileTitle(profile)}</strong>{profile.source === 'central_login' && <span className="source-central"><CloudIcon />Central</span>}</div><small>{profileSummary(profile)}</small>
-            {stale && <small className="sync-status sync-needs_sync">Server has a different version</small>}
+            {stale && <small className="sync-status sync-needs_sync">Central profile differs from the local version · Update available</small>}
             {syncItem?.status === 'error' && <small className="sync-status sync-error">Server check failed{syncItem.detail ? ` · ${syncItem.detail}` : ''}</small>}
           </div>
           <div className="profile-actions inline">
             {syncing && profile.source === 'central_login' && !syncItem && <span className="sync-indicator">Checking…</span>}
-            {stale && login.loggedIn && <IconButton label={`Update ${profile.name} from Central`} onClick={() => void updateCentralProfile(profile.reservedName || profile.name)}><DownloadIcon /></IconButton>}
+            {stale && login.loggedIn && <button className="secondary compact" aria-label={`Update ${profile.name} from Central`} disabled={!!updating || syncing} onClick={() => void updateCentralProfile(profile.reservedName || profile.name)}>{updating === (profile.reservedName || profile.name) ? 'Updating…' : 'Update'}</button>}
             {profile.active && <span className="badge success-badge">Current</span>}
             {!profile.active && <IconButton label={`Use ${profile.name}`} onClick={() => void activate(profile.id)}><CheckCircleIcon /></IconButton>}
             <div className="more-menu-wrapper">

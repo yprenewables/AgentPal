@@ -131,31 +131,7 @@ func (s *Store) SyncCentral(c CentralProfile) (AuthProfile, string, error) {
 		}
 		return AuthProfile{}, "error", errors.New("Central profile was not found after name reconciliation")
 	}
-	updated := existing
-	updated.Name = c.Name
-	updated.Type = c.Type
-	updated.Provider = c.Provider
-	updated.ReservedName = c.Name
-	updated.Source = "central_login"
-	updated.UpdatedAt = time.Now().UTC()
-	if err := s.replaceProfile(updated, c.AuthJSON, c.ConfigTOML); err != nil {
-		return AuthProfile{}, "error", err
-	}
-	saved, err := readSavedProfile(filepath.Join(s.Root, existing.ID))
-	if err != nil {
-		return AuthProfile{}, "error", err
-	}
-	saved.Active = existing.Active
-	profiles, err = s.reconcileCentralName(saved)
-	if err != nil {
-		return AuthProfile{}, "error", err
-	}
-	for _, profile := range profiles {
-		if profile.ID == saved.ID {
-			return profile, "needs_sync", nil
-		}
-	}
-	return AuthProfile{}, "error", errors.New("Central profile was not found after name reconciliation")
+	return existing, "needs_sync", nil
 }
 
 func (s *Store) RemoveCentralProfiles() error {

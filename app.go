@@ -473,10 +473,6 @@ func (a *App) SyncCentralAuthProfiles() (types.AuthSyncReport, error) {
 	if err != nil {
 		return types.AuthSyncReport{}, err
 	}
-	codexDir, err := codex.ExpandPath(state.CodexDir)
-	if err != nil {
-		return types.AuthSyncReport{}, err
-	}
 	store := authprofile.NewStore(profilesRoot)
 	report := types.AuthSyncReport{Items: []types.AuthSyncItem{}}
 	for _, item := range remote {
@@ -485,17 +481,10 @@ func (a *App) SyncCentralAuthProfiles() (types.AuthSyncReport, error) {
 			report.Items = append(report.Items, types.AuthSyncItem{Name: item.Name, Status: "error", Detail: err.Error()})
 			continue
 		}
-		profile, status, err := store.SyncCentral(centralProfileFrom(detail))
+		_, status, err := store.SyncCentral(centralProfileFrom(detail))
 		if err != nil {
 			report.Items = append(report.Items, types.AuthSyncItem{Name: item.Name, Status: "error", Detail: err.Error()})
 			continue
-		}
-		if status == "needs_sync" && profile.Active {
-			if _, err := store.Activate(codexDir, profile.ID, true); err != nil {
-				report.Items = append(report.Items, types.AuthSyncItem{Name: item.Name, Status: "error", Detail: "profile cache updated but active profile could not be applied: " + err.Error()})
-				continue
-			}
-			status = "updated"
 		}
 		report.Items = append(report.Items, types.AuthSyncItem{Name: item.Name, Status: status})
 	}
@@ -528,7 +517,15 @@ func (a *App) ApplyCentralAuthProfile(name string) (types.AuthProfile, error) {
 	if err != nil {
 		return types.AuthProfile{}, err
 	}
-	if status == "needs_sync" && profile.Active {
+	if status == "needs_sync" {
+		active := profile.Active
+		profile, err = store.OverwriteCentral(profile.ID, centralProfileFrom(detail))
+		if err != nil {
+			return types.AuthProfile{}, err
+		}
+		profile.Active = active
+	}
+	if profile.Active {
 		_, err := store.Activate(dir, profile.ID, true)
 		if err != nil {
 			return types.AuthProfile{}, err

@@ -148,10 +148,10 @@ func TestSyncCentralKeepsIDAndReportsContentState(t *testing.T) {
 	next.AuthJSON = []byte(`{"OPENAI_API_KEY":"sk-updated"}`)
 	next.ConfigTOML = []byte("model_provider = \"yangpu\"\n\n[model_providers.yangpu]\nname = \"yangpu\"\nbase_url = \"https://updated.example/v1\"\n")
 	updated, status, err := store.SyncCentral(next)
-	if err != nil || status != "needs_sync" || updated.ID != first.ID || updated.ContentHash == first.ContentHash {
+	if err != nil || status != "needs_sync" || updated.ID != first.ID || updated.ContentHash != first.ContentHash {
 		t.Fatalf("updated sync profile=%#v status=%q err=%v", updated, status, err)
 	}
-	for name, expected := range map[string]string{"auth.json": string(next.AuthJSON), "config-auth.toml": string(next.ConfigTOML)} {
+	for name, expected := range map[string]string{"auth.json": string(centralFixture().AuthJSON), "config-auth.toml": string(centralFixture().ConfigTOML)} {
 		got, err := os.ReadFile(filepath.Join(store.Root, first.ID, name))
 		if err != nil || string(got) != expected {
 			t.Fatalf("%s=%q err=%v", name, got, err)
@@ -159,7 +159,7 @@ func TestSyncCentralKeepsIDAndReportsContentState(t *testing.T) {
 	}
 }
 
-func TestSyncCentralUpdatesActiveProfileCache(t *testing.T) {
+func TestSyncCentralPreservesActiveProfileUntilExplicitUpdate(t *testing.T) {
 	store := NewStore(t.TempDir())
 	first, _, err := store.SyncCentral(centralFixture())
 	if err != nil {
@@ -175,8 +175,19 @@ func TestSyncCentralUpdatesActiveProfileCache(t *testing.T) {
 		t.Fatalf("updated=%#v status=%q err=%v", updated, status, err)
 	}
 	auth, err := os.ReadFile(filepath.Join(store.Root, first.ID, "auth.json"))
-	if err != nil || string(auth) != string(next.AuthJSON) {
+	if err != nil || string(auth) != string(centralFixture().AuthJSON) {
 		t.Fatalf("active cache auth=%s err=%v", auth, err)
+	}
+	for i := 0; i < 2; i++ {
+		if _, status, err := store.SyncCentral(next); err != nil || status != "needs_sync" {
+			t.Fatalf("repeat check status=%s err=%v", status, err)
+		}
+	}
+	if _, err := store.OverwriteCentral(first.ID, next); err != nil {
+		t.Fatal(err)
+	}
+	if _, status, err := store.SyncCentral(next); err != nil || status != "synced" {
+		t.Fatalf("after update status=%s err=%v", status, err)
 	}
 }
 
