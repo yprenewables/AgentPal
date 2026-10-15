@@ -2,12 +2,11 @@ export type Bootstrap = { codexDir: string; centralHost: string; centralPort: nu
 export type ApplyChange = { kind: string; name: string; action: 'apply' | 'delete' };
 export type ConfigDiffItem = { kind: 'skill' | 'mcp'; name: string; status: 'same' | 'new' | 'changed' | 'local_only'; selected: boolean };
 export type ConfigRefresh = { connected: boolean; error?: string; manifest: unknown; diff: { items: ConfigDiffItem[] } };
-export type ApplyResult = { ok: boolean; backupPath: string; rolledBack: boolean; applied: string[] };
+export type ApplyResult = { ok: boolean; applied: string[] };
 export type AuthProfile = { id: string; name: string; type: string; provider: string; source: string; active: boolean; model?: string; apiKeyPreview?: string; baseUrl?: string; chatgptUserId?: string; chatgptExpiresAt?: string; reservedName?: string; contentHash?: string };
 export type CurrentAuthStatus = { provider?: string; apiKeyPreview?: string; baseUrl?: string; chatgptUserId?: string; chatgptExpiresAt?: string; apiKeyImported: boolean; chatgptImported: boolean; currentProfileId?: string };
-export type ProfileSwitchResult = { ok: boolean; profile: AuthProfile; backupPath: string; providerConflict: boolean; conflictDescription?: string };
+export type ProfileSwitchResult = { ok: boolean; profile: AuthProfile; providerConflict: boolean; conflictDescription?: string };
 export type ProfileSwitchPreview = { profile: AuthProfile; provider: string; providerConflict: boolean; conflictDescription?: string; profileProvider?: string; localProvider?: string };
-export type BackupInfo = { device: string; profile: AuthProfile; size: number; updatedAt: string };
 export type UpdateInfo = { currentVersion: string; latestVersion: string; hasUpdate: boolean; releaseUrl: string; assets: Array<{ name: string; url: string; size: number }> };
 export type APIKeyProfileRequest = { name: string; provider: string; baseUrl: string; apiKey: string };
 export type SettingsRequest = { codexDir: string; centralHost: string; centralPort: number; deviceName: string };
@@ -18,9 +17,17 @@ export type AuthSyncItem = { name: string; status: 'added' | 'synced' | 'needs_s
 export type AuthSyncReport = { items: AuthSyncItem[] };
 export type RawProfileContent = { authJson: string; configToml: string };
 export type RawProfileRequest = { name: string; authJson: string; configToml: string };
+export type ModelEntry = { slug?: unknown; display_name?: unknown; visibility?: unknown; [key: string]: unknown };
+export type DefaultModelSettings = { available: boolean; error?: string; configHash: string; model: string; effort: string };
+export type ModelManagementState = { available: boolean; error?: string; provider: string; baseUrl: string; discoveryError?: string; fileValid: boolean; writable: boolean; fileExists: boolean; fileHash: string; models: ModelEntry[]; rawModels: string[] };
 
 type Backend = { App: {
   GetBootstrap(): Promise<Bootstrap>;
+  GetModelManagementState(): Promise<ModelManagementState>;
+  GetDefaultModelSettings(): Promise<DefaultModelSettings>;
+  SaveDefaultModelSettings(request: { configHash: string; model: string; effort: string }): Promise<DefaultModelSettings>;
+  DiscoverModels(): Promise<string[]>;
+  SaveModels(request: { fileHash: string; rawModels: string[]; visibilityOverrides: Record<number, string> }): Promise<ModelManagementState>;
   SaveSettings(request: SettingsRequest): Promise<Bootstrap>;
   RefreshConfiguration(): Promise<ConfigRefresh>;
   ApplyConfiguration(request: { changes: ApplyChange[] }): Promise<ApplyResult>;
@@ -38,10 +45,6 @@ type Backend = { App: {
   PreviewAuthProfile(id: string): Promise<ProfileSwitchPreview>;
   ActivateAuthProfileWithConflict(id: string, allowProviderConflict: boolean): Promise<ProfileSwitchResult>;
   DeleteAuthProfile(id: string): Promise<void>;
-  ListRemoteBackups(): Promise<BackupInfo[]>;
-  UploadAuthProfile(id: string, overwrite: boolean): Promise<void>;
-  RestoreAuthProfile(device: string, id: string): Promise<AuthProfile>;
-  DeleteRemoteBackup(device: string, id: string): Promise<void>;
   OpenFolder(path: string): Promise<void>;
   CheckForUpdate(): Promise<UpdateInfo>;
   OpenURL(url: string): Promise<void>;

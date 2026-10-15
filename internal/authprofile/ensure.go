@@ -181,11 +181,7 @@ func (s *Store) reconcileCurrent(codexDir string, afterWrite func()) ([]AuthProf
 		if len(localMatches) == 1 {
 			existing = &localMatches[0]
 		}
-		rollback, err := s.currentSnapshotRollback(existing)
-		if err != nil {
-			return nil, CurrentStatus{}, err
-		}
-		written, err := s.writeCurrentSnapshot(snapshot, existing)
+		_, err = s.writeCurrentSnapshot(snapshot, existing)
 		if err != nil {
 			return nil, CurrentStatus{}, err
 		}
@@ -195,41 +191,23 @@ func (s *Store) reconcileCurrent(codexDir string, afterWrite func()) ([]AuthProf
 
 		profiles, err = s.List()
 		if err != nil {
-			if rollbackErr := rollback(written.ID); rollbackErr != nil {
-				return nil, CurrentStatus{}, fmt.Errorf("reload profiles: %w; rollback failed: %v", err, rollbackErr)
-			}
 			return nil, CurrentStatus{}, err
 		}
 		verified, verifiedOK, err := readCurrentSnapshot(codexDir)
 		if err != nil {
-			if rollbackErr := rollback(written.ID); rollbackErr != nil {
-				return nil, CurrentStatus{}, fmt.Errorf("verify current authentication: %w; rollback failed: %v", err, rollbackErr)
-			}
 			return nil, CurrentStatus{}, err
 		}
 		if !verifiedOK {
-			if err := rollback(written.ID); err != nil {
-				return nil, CurrentStatus{}, err
-			}
 			return nil, CurrentStatus{}, errors.New("current Codex authentication changed during reconciliation")
 		}
 		if verified.contentHash != snapshot.contentHash {
-			if err := rollback(written.ID); err != nil {
-				return nil, CurrentStatus{}, err
-			}
 			continue
 		}
 		status := exactCurrentStatus(verified, profiles)
 		if status.CurrentProfileID == "" {
-			if err := rollback(written.ID); err != nil {
-				return nil, CurrentStatus{}, err
-			}
 			return nil, CurrentStatus{}, errors.New("automatically imported authentication profile does not match current Codex authentication")
 		}
 		if err := s.writeActiveProfileID(status.CurrentProfileID); err != nil {
-			if rollbackErr := rollback(written.ID); rollbackErr != nil {
-				return nil, CurrentStatus{}, fmt.Errorf("write active profile: %w; rollback failed: %v", err, rollbackErr)
-			}
 			return nil, CurrentStatus{}, err
 		}
 		return profiles, status, nil
@@ -271,30 +249,6 @@ func (s *Store) activeCentralStatus(snapshot currentSnapshot, profiles []AuthPro
 		}
 	}
 	return CurrentStatus{}, nil
-}
-
-func (s *Store) currentSnapshotRollback(existing *AuthProfile) (func(string) error, error) {
-	if existing == nil {
-		return func(profileID string) error {
-			return os.RemoveAll(filepath.Join(s.Root, profileID))
-		}, nil
-	}
-	authJSON, configTOML, err := s.GetRawContent(existing.ID)
-	if err != nil {
-		return nil, err
-	}
-	original := *existing
-	return func(string) error {
-		dir := filepath.Join(s.Root, original.ID)
-		if err := os.MkdirAll(dir, 0o700); err != nil {
-			return err
-		}
-		if err := writeProfile(dir, original, []byte(authJSON), []byte(configTOML)); err != nil {
-			return err
-		}
-		_, err := readSavedProfile(dir)
-		return err
-	}, nil
 }
 
 func (s *Store) writeActiveProfileID(profileID string) error {
@@ -358,28 +312,15 @@ func (s *Store) writeCurrentSnapshot(snapshot currentSnapshot, existing *AuthPro
 		return readSavedProfile(finalDir)
 	}
 
-	backupDir := filepath.Join(s.Root, ".agentpal-auth-backup-"+uuid.NewString())
-	if err := os.Rename(finalDir, backupDir); err != nil {
+	if err := os.RemoveAll(finalDir); err != nil {
 		return AuthProfile{}, err
 	}
-	rollback := func(cause error) error {
-		removeErr := os.RemoveAll(finalDir)
-		restoreErr := os.Rename(backupDir, finalDir)
-		if restoreErr == nil {
-			_, restoreErr = readSavedProfile(finalDir)
-		}
-		if removeErr != nil || restoreErr != nil {
-			return fmt.Errorf("%w; rollback failed: remove=%v restore=%v", cause, removeErr, restoreErr)
-		}
-		return cause
-	}
 	if err := os.Rename(staging, finalDir); err != nil {
-		return AuthProfile{}, rollback(err)
+		return AuthProfile{}, err
 	}
 	installed, err := readSavedProfile(finalDir)
 	if err != nil {
-		return AuthProfile{}, rollback(err)
+		return AuthProfile{}, err
 	}
-	_ = os.RemoveAll(backupDir)
 	return installed, nil
 }

@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"agentpal/internal/constants"
 )
@@ -19,14 +18,6 @@ type State struct {
 }
 
 var stateDirOverride string
-
-type HistoryEntry struct {
-	Time   time.Time `json:"time"`
-	Peer   string    `json:"peer"`
-	Target string    `json:"target"`
-	Items  []string  `json:"items"`
-	Backup string    `json:"backup"`
-}
 
 func StateDir() (string, error) {
 	if stateDirOverride != "" {
@@ -108,30 +99,6 @@ func normalizeState(state *State) {
 
 func validPort(port int) bool {
 	return port >= 1 && port <= 65535
-}
-
-func AppendHistory(entry HistoryEntry) error {
-	path, err := stateFile("history.json")
-	if err != nil {
-		return err
-	}
-	var history []HistoryEntry
-	data, err := os.ReadFile(path)
-	if err == nil {
-		_ = json.Unmarshal(data, &history)
-	} else if !os.IsNotExist(err) {
-		return err
-	}
-	history = append(history, entry)
-	return writeJSON("history.json", history)
-}
-
-func BackupRoot() (string, error) {
-	dir, err := StateDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(dir, "backups"), nil
 }
 
 func stateFile(name string) (string, error) {

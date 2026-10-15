@@ -16,12 +16,9 @@ func TestActivatePreservesMCPAndProjects(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := store.Activate(codexDir, profile.ID, true)
+	_, err = store.Activate(codexDir, profile.ID, true)
 	if err != nil {
 		t.Fatal(err)
-	}
-	if result.BackupPath == "" {
-		t.Fatal("missing backup")
 	}
 	data, _ := os.ReadFile(filepath.Join(codexDir, "config.toml"))
 	got := string(data)

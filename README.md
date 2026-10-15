@@ -2,7 +2,7 @@
 
 AgentPal 是 Codex 的中心化配置客户端。它从一个 AgentPal Server 拉取 Skills 和 MCP 配置，先展示差异，再由用户确认应用；本机的 ChatGPT 登录和 API Key 通过认证档案管理和切换。
 
-第一版只支持 Codex、可信局域网 HTTP 和默认端口 `28888`。认证备份为明文且无账号鉴权，只适用于可信内网。
+第一版只支持 Codex、可信局域网 HTTP 和默认端口 `28888`。
 
 ## 运行模式
 
@@ -20,29 +20,19 @@ Client 示例：
 }
 ```
 
-Server 示例：
-
-```json
-{
-  "mode": "server",
-  "codex_dir": "~/.codex",
-  "port": 28888,
-  "backup_dir": "~/.agentpal/server/auth-backups",
-  "device_name": "central-node"
-}
-```
-
 Server 直接读取配置的 Codex 目录。每次清单请求都会重新扫描，因此目录变化会在客户端刷新后体现，不需要手动发布快照。
 
 ## 客户端
 
-默认进入 `Configuration` 标签并连接中心节点：
+默认进入 `Authentication` 标签并连接中心节点：
 
-- `Configuration`：比较 Skills 和 `[mcp_servers.*]`，预览新增、修改、本地独有和一致项，确认后应用。
 - `Authentication`：导入当前 Codex 登录、创建 API Key 档案、查看和切换本地档案。
-- `Backups`：按设备查看中心认证备份，上传、恢复或删除均为明确操作。
+- `Models`：从当前 Provider 的 `/models` 同步模型清单，移除已下线模型，调整可见性及默认模型、推理强度。Auto update 更新草稿，Save models 后写入文件。
+- `Configuration`：比较 Skills 和 `[mcp_servers.*]`，预览新增、修改、本地独有和一致项，确认后应用。
 
-本地独有的 Skill/MCP 默认保留。下载内容会先校验 SHA-256，应用前创建备份，失败时恢复原配置。恢复中心认证备份只创建本地档案，不会自动激活。
+保存模型会补齐 Codex 模型目录所需的元数据，并将当前 Codex 目录的 `models.json` 接入 `config.toml` 的 `model_catalog_json`。保存后完全退出并重新打开 ChatGPT / Codex 以加载清单。模型实际调用需要 Provider 支持对应模型的 Responses API。
+
+本地独有的 Skill/MCP 默认保留。下载内容会先校验 SHA-256。
 
 ## 认证档案
 
@@ -55,9 +45,7 @@ Server 直接读取配置的 Codex 目录。每次清单请求都会重新扫描
   config-auth.toml
 ```
 
-切换档案会更新 `auth.json` 和 `model_provider`，并用档案中的 Provider 配置完整覆盖本机同名 Provider；其他 Provider、MCP、Projects 和本机设置保持不变。切换前会备份当前 `auth.json` 和 `config.toml`。
-
-中心备份按设备名和档案 ID 存放。上传前请确认网络可信，因为第一版不加密、不登录、不做权限控制。
+切换档案会更新 `auth.json` 和 `model_provider`，并用档案中的 Provider 配置完整覆盖本机同名 Provider；其他 Provider、MCP、Projects 和本机设置保持不变。
 
 ## 中心节点与预留 profile
 
@@ -93,7 +81,7 @@ Server 直接读取配置的 Codex 目录。每次清单请求都会重新扫描
 
 ## 中心节点 API
 
-中心节点对客户端暴露的 HTTP 接口（配置清单、认证备份、设备登录、预留 profile）与管理接口（`/v1/admin/*`）均由独立项目 `agentpal-central` 提供，完整列表见其 README。
+中心节点对客户端暴露的 HTTP 接口（配置清单、设备登录、预留 profile）与管理接口（`/v1/admin/*`）均由独立项目 `agentpal-central` 提供，完整列表见其 README。
 
 Server 不在配置清单中发布 `auth.json`。所有路径都会进行安全校验，拒绝绝对路径和路径穿越。
 
@@ -102,15 +90,11 @@ Server 不在配置清单中发布 `auth.json`。所有路径都会进行安全�
 ```text
 ~/.agentpal/config.json
 ~/.agentpal/auth-profiles/
-~/.agentpal/backups/
-~/.agentpal/server/auth-backups/
 ```
 
 ## 非目标
 
 - OpenCode 或其他 Agent 工具
 - 公网部署、HTTPS、多租户
-- 认证备份加密
 - Skills/MCP 静默自动应用
-- 中心配置版本历史和回滚界面
 - 点对点 Share/Sync 工作流

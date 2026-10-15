@@ -7,8 +7,6 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
-
-	"github.com/google/uuid"
 )
 
 func centralMetadata(local AuthProfile, c CentralProfile) AuthProfile {
@@ -34,27 +32,15 @@ func (s *Store) replaceProfile(profile AuthProfile, auth, config []byte) error {
 	if _, err := readSavedProfile(staging); err != nil {
 		return err
 	}
-	backup := filepath.Join(s.Root, ".agentpal-auth-backup-"+uuid.NewString())
-	if err := os.Rename(dir, backup); err != nil {
+	if err := os.RemoveAll(dir); err != nil {
 		return err
 	}
 	if err := os.Rename(staging, dir); err != nil {
-		if restoreErr := os.Rename(backup, dir); restoreErr != nil {
-			return fmt.Errorf("install profile: %w; rollback failed: %v", err, restoreErr)
-		}
 		return err
 	}
 	if _, err := readSavedProfile(dir); err != nil {
-		removeErr := os.RemoveAll(dir)
-		restoreErr := os.Rename(backup, dir)
-		if removeErr != nil || restoreErr != nil {
-			return fmt.Errorf("validate installed profile: %w; rollback failed: remove=%v restore=%v", err, removeErr, restoreErr)
-		}
 		return err
 	}
-	// The replacement is committed. A stale hidden backup is safer than
-	// reporting failure after callers have already observed the new profile.
-	_ = os.RemoveAll(backup)
 	return nil
 }
 
@@ -98,49 +84,45 @@ func validateCentralNameOwnership(profiles []AuthProfile, ownedName, centralHash
 	return ensureDerivedNameAvailable(profiles, matches[0], ownedName+" (Local)")
 }
 
-func (s *Store) prepareCentralImport(c CentralProfile) (*AuthProfile, func() error, error) {
+func (s *Store) prepareCentralImport(c CentralProfile) (*AuthProfile, error) {
 	profiles, err := s.List()
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	matches, err := sameNameLocal(profiles, c.Name)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	if len(matches) == 0 {
-		return nil, func() error { return nil }, nil
+		return nil, nil
 	}
 	local := matches[0]
 	incomingHash, err := ComputeContentHash(c.AuthJSON, c.ConfigTOML)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	auth, config, err := s.GetRawContent(local.ID)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	if local.ContentHash == incomingHash {
 		converted := centralMetadata(local, c)
 		if err := s.replaceProfile(converted, c.AuthJSON, c.ConfigTOML); err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 		saved, err := readSavedProfile(filepath.Join(s.Root, local.ID))
-		return &saved, func() error { return nil }, err
+		return &saved, err
 	}
 	derivedName := c.Name + " (Local)"
 	if err := ensureDerivedNameAvailable(profiles, local, derivedName); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	original := local
 	local.Name = derivedName
 	local.UpdatedAt = time.Now().UTC()
 	if err := s.replaceProfile(local, []byte(auth), []byte(config)); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	rollback := func() error {
-		return s.replaceProfile(original, []byte(auth), []byte(config))
-	}
-	return nil, rollback, nil
+	return nil, nil
 }
 
 func (s *Store) reconcileCentralName(central AuthProfile) ([]AuthProfile, error) {
@@ -178,23 +160,12 @@ func (s *Store) reconcileCentralName(central AuthProfile) ([]AuthProfile, error)
 			return nil, readErr
 		}
 		wasActive := strings.TrimSpace(string(active)) == local.ID
-		backup := filepath.Join(s.Root, ".agentpal-auth-backup-"+uuid.NewString())
-		if err := os.Rename(filepath.Join(s.Root, local.ID), backup); err != nil {
-			return nil, err
-		}
 		if wasActive {
 			if err := s.writeActiveProfileID(central.ID); err != nil {
-				_ = os.Rename(backup, filepath.Join(s.Root, local.ID))
 				return nil, err
 			}
 		}
-		if err := os.RemoveAll(backup); err != nil {
-			if wasActive {
-				_ = s.writeActiveProfileID(local.ID)
-			}
-			if restoreErr := os.Rename(backup, filepath.Join(s.Root, local.ID)); restoreErr != nil {
-				return nil, fmt.Errorf("remove duplicate local profile: %w; rollback failed: %v", err, restoreErr)
-			}
+		if err := os.RemoveAll(filepath.Join(s.Root, local.ID)); err != nil {
 			return nil, err
 		}
 		return s.List()

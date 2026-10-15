@@ -586,7 +586,7 @@ func TestReconcileCurrentRejectsMissingProviderTable(t *testing.T) {
 func TestStoreListIgnoresReconcileArtifacts(t *testing.T) {
 	store := NewStore(t.TempDir())
 	profile := AuthProfile{ID: "artifact", Name: "artifact", Type: "api_key", Provider: "corp", Source: "manual"}
-	for _, name := range []string{".agentpal-auth-import-one", ".agentpal-auth-backup-one"} {
+	for _, name := range []string{".agentpal-auth-import-one"} {
 		dir := filepath.Join(store.Root, name)
 		if err := os.MkdirAll(dir, 0o700); err != nil {
 			t.Fatal(err)
@@ -612,7 +612,7 @@ func TestReconcileCurrentRetriesWhenCodexChanges(t *testing.T) {
 			writeCurrentAuth(t, codexDir, `{"OPENAI_API_KEY":"sk-second-secret"}`, "model_provider = \"second\"\n\n[model_providers.second]\nbase_url = \"https://second.example/v1\"\n")
 		}
 	})
-	if err != nil || calls != 2 || len(profiles) != 1 {
+	if err != nil || calls != 2 || len(profiles) != 2 {
 		t.Fatalf("profiles=%#v status=%#v calls=%d err=%v", profiles, status, calls, err)
 	}
 	var selected AuthProfile
@@ -643,12 +643,12 @@ func TestReconcileCurrentRejectsRepeatedCodexChanges(t *testing.T) {
 		t.Fatalf("calls=%d err=%v", calls, err)
 	}
 	profiles, listErr := store.List()
-	if listErr != nil || len(profiles) != 0 {
+	if listErr != nil || len(profiles) != 2 {
 		t.Fatalf("profiles=%#v err=%v", profiles, listErr)
 	}
 }
 
-func TestReconcileCurrentRollsBackWhenVerificationCannotReadCodex(t *testing.T) {
+func TestReconcileCurrentKeepsImportedProfileWhenVerificationCannotReadCodex(t *testing.T) {
 	codexDir := t.TempDir()
 	writeCurrentAuth(t, codexDir, `{"OPENAI_API_KEY":"sk-current-secret"}`, "model_provider = \"current\"\n\n[model_providers.current]\nbase_url = \"https://current.example/v1\"\n")
 	store := NewStore(t.TempDir())
@@ -662,7 +662,7 @@ func TestReconcileCurrentRollsBackWhenVerificationCannotReadCodex(t *testing.T) 
 		t.Fatal("expected invalid current auth error")
 	}
 	profiles, listErr := store.List()
-	if listErr != nil || len(profiles) != 0 {
+	if listErr != nil || len(profiles) != 1 {
 		t.Fatalf("profiles=%#v err=%v", profiles, listErr)
 	}
 }

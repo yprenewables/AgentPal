@@ -98,10 +98,8 @@ type ApplyRequest struct {
 	Changes     []ApplyChange `json:"changes"`
 }
 type ApplyResult struct {
-	OK         bool     `json:"ok"`
-	BackupPath string   `json:"backupPath"`
-	RolledBack bool     `json:"rolledBack"`
-	Applied    []string `json:"applied"`
+	OK      bool     `json:"ok"`
+	Applied []string `json:"applied"`
 }
 type ServerStatus struct {
 	Running  bool   `json:"running"`
@@ -120,7 +118,6 @@ type ConfigRefresh struct {
 type ProfileSwitchResult struct {
 	OK                  bool        `json:"ok"`
 	Profile             AuthProfile `json:"profile"`
-	BackupPath          string      `json:"backupPath"`
 	ProviderConflict    bool        `json:"providerConflict"`
 	ConflictDescription string      `json:"conflictDescription,omitempty"`
 	ProfileProvider     string      `json:"profileProvider,omitempty"`
@@ -174,19 +171,6 @@ type RawProfileContent struct {
 	AuthJSON   string `json:"authJson"`
 	ConfigTOML string `json:"configToml"`
 }
-type BackupInfo struct {
-	Device    string      `json:"device"`
-	Profile   AuthProfile `json:"profile"`
-	Size      int64       `json:"size"`
-	UpdatedAt time.Time   `json:"updatedAt"`
-}
-type RemoteBackup struct {
-	Device    string      `json:"device"`
-	Profile   AuthProfile `json:"profile"`
-	Size      int64       `json:"size"`
-	UpdatedAt time.Time   `json:"updatedAt"`
-}
-
 type ResourceStatus struct {
 	Exists    bool     `json:"exists"`
 	Path      string   `json:"path"`

@@ -1,7 +1,8 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { api, type ApplyChange, type AuthProfile, type AuthSyncItem, type BackupInfo, type Bootstrap, type ConfigRefresh, type RawProfileContent, type RawProfileRequest, type SettingsRequest } from './wails';
+import { api, type ApplyChange, type AuthProfile, type AuthSyncItem, type Bootstrap, type ConfigRefresh, type SettingsRequest } from './wails';
+import ModelsTab from './ModelsTab';
 
-type Tab = 'configuration' | 'authentication' | 'backups';
+type Tab = 'authentication' | 'models' | 'configuration';
 
 export default function App() {
   const [bootstrap, setBootstrap] = useState<Bootstrap | null>(null);
@@ -10,11 +11,14 @@ export default function App() {
   if (!api) return <main className="shell"><Notice kind="warning">Backend bridge is unavailable. Run AgentPal inside Wails.</Notice></main>;
   if (error) return <main className="shell"><Notice kind="error">{error}</Notice></main>;
   if (!bootstrap) return <main className="shell loading">Loading AgentPal...</main>;
-  return <ClientApp bootstrap={bootstrap} />;
+  return <ClientApp bootstrap={bootstrap} onBootstrapChange={setBootstrap} />;
 }
 
-function ClientApp({ bootstrap }: { bootstrap: Bootstrap }) {
-  const [tab, setTab] = useState<Tab>('configuration');
+function ClientApp({ bootstrap, onBootstrapChange }: { bootstrap: Bootstrap; onBootstrapChange: (bootstrap: Bootstrap) => void }) {
+  const [tab, setTab] = useState<Tab>('authentication');
+  const [modelsDirty, setModelsDirty] = useState(false);
+  const [modelsBusy, setModelsBusy] = useState(false);
+  const [pendingTab, setPendingTab] = useState<Tab | null>(null);
   const [refresh, setRefresh] = useState<ConfigRefresh | null>(null);
   const [profiles, setProfiles] = useState<AuthProfile[]>([]);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -34,12 +38,13 @@ function ClientApp({ bootstrap }: { bootstrap: Bootstrap }) {
   return <main className="shell">
     <header className="topbar"><div><div className="brand">AgentPal</div><small>Codex configuration client</small></div><div className="top-actions"><span className={`connection-dot ${refresh?.connected ? 'online' : ''}`}>● {refresh?.connected ? 'Central connected' : 'Central offline'}</span><button className="icon-button" aria-label="Open menu" onClick={() => setMenuOpen(!menuOpen)}>•••</button>{menuOpen && <Menu bootstrap={bootstrap} onRefresh={loadConfiguration} onSettings={() => setShowSettings(true)} onClose={() => setMenuOpen(false)} />}</div></header>
     <section className="node-strip"><strong>{bootstrap.centralHost}:{bootstrap.centralPort}</strong><span>Central configuration node</span><button className="text-button" onClick={() => void loadConfiguration()}>Refresh</button></section>
-    <nav className="tabs" aria-label="AgentPal sections">{(['configuration', 'authentication', 'backups'] as Tab[]).map((item) => <button key={item} className={tab === item ? 'tab active' : 'tab'} onClick={() => { setTab(item); if (item === 'authentication') void loadProfiles(); }}>{labelForTab(item)}</button>)}</nav>
+    <nav className="tabs" aria-label="AgentPal sections">{(['authentication', 'models', 'configuration'] as Tab[]).map((item) => <button key={item} disabled={tab === 'models' && modelsBusy && item !== tab} className={tab === item ? 'tab active' : 'tab'} onClick={() => { if (item === tab) return; if (tab === 'models' && modelsDirty) { setPendingTab(item); return; } setTab(item); if (item === 'authentication') void loadProfiles(); }}>{labelForTab(item)}</button>)}</nav>
     {notice && <Notice kind={notice.kind}>{notice.text}</Notice>}
     {tab === 'configuration' && <ConfigurationTab refresh={refresh} onRefresh={loadConfiguration} setNotice={setNotice} />}
     {tab === 'authentication' && <AuthenticationTabCompact profiles={profiles} reload={loadProfiles} setNotice={setNotice} />}
-    {tab === 'backups' && <BackupsTab setNotice={setNotice} />}
-    {showSettings && <SettingsDialog bootstrap={bootstrap} onClose={() => setShowSettings(false)} setNotice={setNotice} />}
+    {tab === 'models' && <ModelsTab onDirtyChange={setModelsDirty} onBusyChange={setModelsBusy} />}
+    {pendingTab && <div className="dialog-backdrop"><div className="dialog" role="dialog" aria-modal="true" aria-labelledby="discard-models-title"><h2 id="discard-models-title">Discard unsaved model changes?</h2><p>Your model changes have not been saved.</p><div className="button-row"><button className="secondary" onClick={() => setPendingTab(null)}>Cancel</button><button className="danger" onClick={() => { setTab(pendingTab); setPendingTab(null); setModelsDirty(false); if (pendingTab === 'authentication') void loadProfiles(); }}>Discard changes</button></div></div></div>}
+    {showSettings && <SettingsDialog bootstrap={bootstrap} onSaved={onBootstrapChange} onClose={() => setShowSettings(false)} setNotice={setNotice} />}
     <div className="version-status">{version}</div>
   </main>;
 }
@@ -51,7 +56,7 @@ function ConfigurationTab({ refresh, onRefresh, setNotice }: { refresh: ConfigRe
   useEffect(() => { setSelected(Object.fromEntries(items.map((item) => [`${item.kind}:${item.name}`, item.selected]))); }, [refresh]);
   if (!refresh?.connected) return <section className="workspace empty-state"><div className="status-symbol">!</div><h1>Connect to the central node</h1><p>AgentPal could not load the latest Skills and MCP configuration.</p><button className="primary" onClick={() => void onRefresh()}>Retry connection</button></section>;
   const changes = items.filter((item) => item.status !== 'same');
-  async function apply() { if (!api || !changes.length) return; setApplying(true); const selectedChanges: ApplyChange[] = changes.filter((item) => selected[`${item.kind}:${item.name}`]).map((item) => ({ kind: item.kind, name: item.name, action: item.status === 'local_only' ? 'delete' : 'apply' })); try { const result = await api.ApplyConfiguration({ changes: selectedChanges }); setNotice({ kind: result.ok ? 'success' : 'error', text: result.ok ? `Configuration applied. Backup: ${result.backupPath}` : `Configuration rolled back. Backup: ${result.backupPath}` }); await onRefresh(); } catch (error) { setNotice({ kind: 'error', text: String(error) }); } finally { setApplying(false); } }
+  async function apply() { if (!api || !changes.length) return; setApplying(true); const selectedChanges: ApplyChange[] = changes.filter((item) => selected[`${item.kind}:${item.name}`]).map((item) => ({ kind: item.kind, name: item.name, action: item.status === 'local_only' ? 'delete' : 'apply' })); try { const result = await api.ApplyConfiguration({ changes: selectedChanges }); setNotice({ kind: result.ok ? 'success' : 'error', text: result.ok ? 'Configuration applied.' : 'Configuration could not be applied.' }); await onRefresh(); } catch (error) { setNotice({ kind: 'error', text: String(error) }); } finally { setApplying(false); } }
   return <section className="workspace"><div className="section-heading"><div><h1>Available updates</h1><p>Review central changes before applying them to this Mac.</p></div><span className={changes.length ? 'badge attention' : 'badge'}>{changes.length} updates</span></div><div className="resource-list">{items.map((item) => <label className="resource-row" key={`${item.kind}:${item.name}`}><input type="checkbox" checked={!!selected[`${item.kind}:${item.name}`]} onChange={(event) => setSelected({ ...selected, [`${item.kind}:${item.name}`]: event.target.checked })} /><span><strong>{item.name}</strong><small>{item.kind === 'skill' ? 'Skill' : 'MCP server'}</small></span><em className={`diff-${item.status}`}>{statusLabel(item.status)}</em></label>)}</div><button className="primary" disabled={applying || !changes.some((item) => selected[`${item.kind}:${item.name}`])} onClick={() => void apply()}>{applying ? 'Applying...' : 'Review and apply'}</button></section>;
 }
 
@@ -59,7 +64,7 @@ function AuthenticationTab({ profiles, reload, setNotice }: { profiles: AuthProf
   const [showKey, setShowKey] = useState(false); const [name, setName] = useState(''); const [provider, setProvider] = useState('openai'); const [model, setModel] = useState(''); const [baseUrl, setBaseUrl] = useState('https://api.openai.com/v1'); const [key, setKey] = useState(''); const [current, setCurrent] = useState<{ apiKeyPreview?: string; baseUrl?: string; chatgptUserId?: string; chatgptExpiresAt?: string; apiKeyImported: boolean; chatgptImported: boolean } | null>(null);
   useEffect(() => { void api?.GetCurrentAuthStatus().then(setCurrent).catch(() => setCurrent(null)); }, [profiles]);
   async function create() { if (!api) return; try { await api.CreateAPIKeyProfile({ name, provider, baseUrl, apiKey: key }); setShowKey(false); setKey(''); await reload(); setNotice({ kind: 'success', text: 'API Key profile created.' }); } catch (error) { setNotice({ kind: 'error', text: String(error) }); } }
-  async function activate(id: string) { if (!api) return; try { const result = await api.ActivateAuthProfile(id); setNotice({ kind: 'success', text: `Profile activated. Backup: ${result.backupPath}` }); await reload(); } catch (error) { setNotice({ kind: 'error', text: String(error) }); } }
+  async function activate(id: string) { if (!api) return; try { await api.ActivateAuthProfile(id); setNotice({ kind: 'success', text: 'Profile activated.' }); await reload(); } catch (error) { setNotice({ kind: 'error', text: String(error) }); } }
   async function importAPIKey() { if (!api) return; try { await api.ImportCurrentAPIKey('Current API Key'); await reload(); setNotice({ kind: 'success', text: 'Current API Key imported.' }); } catch (error) { setNotice({ kind: 'error', text: String(error) }); } }
   async function importChatGPT() { if (!api) return; try { await api.ImportCurrentAuth('Current ChatGPT login'); await reload(); setNotice({ kind: 'success', text: 'Current ChatGPT login imported.' }); } catch (error) { setNotice({ kind: 'error', text: String(error) }); } }
   const showCurrentPreview = !!current && !((current.apiKeyImported && current.apiKeyPreview) || (current.chatgptImported && current.chatgptUserId));
@@ -199,7 +204,7 @@ function AuthenticationTabCompact({ profiles, reload, setNotice }: { profiles: A
       }
       const result = await api.ActivateAuthProfileWithConflict(id, false);
       if (result.providerConflict) { setNotice({ kind: 'warning', text: result.conflictDescription || 'Provider configuration conflict. Nothing was changed.' }); return; }
-      setNotice({ kind: 'success', text: `Profile activated. Backup: ${result.backupPath}` }); await reload();
+      setNotice({ kind: 'success', text: 'Profile activated.' }); await reload();
     } catch (error) { setNotice({ kind: 'error', text: String(error) }); }
   }
 
@@ -222,7 +227,7 @@ function AuthenticationTabCompact({ profiles, reload, setNotice }: { profiles: A
       } else if (action.kind === 'switch' && action.profile) {
         const result = await api.ActivateAuthProfileWithConflict(action.profile.id, true);
         if (result.providerConflict) { setNotice({ kind: 'warning', text: result.conflictDescription || 'Provider configuration conflict. Nothing was changed.' }); return; }
-        setNotice({ kind: 'success', text: `Profile activated. Backup: ${result.backupPath}` });
+        setNotice({ kind: 'success', text: 'Profile activated.' });
         await reload();
       }
     } catch (error) {
@@ -278,7 +283,7 @@ function AuthenticationTabCompact({ profiles, reload, setNotice }: { profiles: A
       <label className="field"><span>config-auth.toml</span><textarea className="code-editor" spellCheck={false} rows={10} value={editDialog.configToml} onChange={(event) => setEditDialog({ ...editDialog, configToml: event.target.value })} /></label>
       <div className="button-row dialog-actions"><button className="secondary" onClick={() => setEditDialog({ open: false, name: '', authJson: '', configToml: '' })}>Cancel</button><button className="primary" onClick={() => void saveRawProfile()}>{editDialog.profile ? 'Save' : 'Create'}</button></div>
     </div></div>}
-    {confirmAction && <div className="dialog-backdrop"><div className="dialog"><div className="section-heading"><h2>{confirmAction.kind === 'delete' ? 'Delete profile?' : confirmAction.localProvider ? 'Replace local provider?' : 'Add profile provider?'}</h2><button className="icon-button" onClick={() => setConfirmAction(null)}>×</button></div>{confirmAction.kind === 'delete' ? <p>Delete {confirmAction.profile?.name || 'this profile'} and its saved credentials? Remote backups and current credentials will not change.</p> : <div className="provider-diff"><p>{confirmAction.localProvider ? 'Switching profiles will replace the matching local Provider configuration with the Profile Provider configuration. auth.json and model_provider will also be updated. Other local Providers, MCP servers, projects, and settings will be kept.' : 'The Profile Provider is not configured locally. Switching profiles will add it and update auth.json and model_provider. Other local Providers, MCP servers, projects, and settings will be kept.'}</p>{confirmAction.profileProvider && <div className="diff-columns"><div className="diff-column"><strong>Profile Provider (will be applied)</strong><pre>{confirmAction.profileProvider}</pre></div>{confirmAction.localProvider && <div className="diff-column"><strong>Local Provider (will be replaced)</strong><pre>{confirmAction.localProvider}</pre></div>}</div>}</div>}<div className="button-row"><button className="secondary" onClick={() => setConfirmAction(null)}>Cancel</button><button className={confirmAction.kind === 'delete' ? 'danger' : 'primary'} onClick={() => void confirmActionNow()}>{confirmAction.kind === 'delete' ? 'Delete' : 'Switch profile'}</button></div></div></div>}
+    {confirmAction && <div className="dialog-backdrop"><div className="dialog"><div className="section-heading"><h2>{confirmAction.kind === 'delete' ? 'Delete profile?' : confirmAction.localProvider ? 'Replace local provider?' : 'Add profile provider?'}</h2><button className="icon-button" onClick={() => setConfirmAction(null)}>×</button></div>{confirmAction.kind === 'delete' ? <p>Delete {confirmAction.profile?.name || 'this profile'} and its saved credentials? Current credentials will not change.</p> : <div className="provider-diff"><p>{confirmAction.localProvider ? 'Switching profiles will replace the matching local Provider configuration with the Profile Provider configuration. auth.json and model_provider will also be updated. Other local Providers, MCP servers, projects, and settings will be kept.' : 'The Profile Provider is not configured locally. Switching profiles will add it and update auth.json and model_provider. Other local Providers, MCP servers, projects, and settings will be kept.'}</p>{confirmAction.profileProvider && <div className="diff-columns"><div className="diff-column"><strong>Profile Provider (will be applied)</strong><pre>{confirmAction.profileProvider}</pre></div>{confirmAction.localProvider && <div className="diff-column"><strong>Local Provider (will be replaced)</strong><pre>{confirmAction.localProvider}</pre></div>}</div>}</div>}<div className="button-row"><button className="secondary" onClick={() => setConfirmAction(null)}>Cancel</button><button className={confirmAction.kind === 'delete' ? 'danger' : 'primary'} onClick={() => void confirmActionNow()}>{confirmAction.kind === 'delete' ? 'Delete' : 'Switch profile'}</button></div></div></div>}
   </section>;
 }
 
@@ -297,21 +302,11 @@ function profileSummary(profile: AuthProfile) {
   return identity;
 }
 
-function BackupsTab({ setNotice }: { setNotice: (value: { kind: NoticeKind; text: string } | null) => void }) {
-  const [backups, setBackups] = useState<BackupInfo[]>([]);
-  const [profiles, setProfiles] = useState<AuthProfile[]>([]);
-  async function load() { if (!api) return; try { setBackups(await api.ListRemoteBackups()); setProfiles(await api.ListAuthProfiles()); } catch (error) { setNotice({ kind: 'error', text: String(error) }); } }
-  useEffect(() => { void load(); }, []);
-  async function upload(id: string) { if (!api) return; try { await api.UploadAuthProfile(id, false); setNotice({ kind: 'success', text: 'Authentication profile uploaded.' }); await load(); } catch (error) { setNotice({ kind: 'error', text: String(error) }); } }
-  async function restore(device: string, id: string) { if (!api) return; try { const profile = await api.RestoreAuthProfile(device, id); setNotice({ kind: 'success', text: `Restored ${profile.name} as a local inactive profile.` }); } catch (error) { setNotice({ kind: 'error', text: String(error) }); } }
-  async function remove(device: string, id: string) { if (!api) return; try { await api.DeleteRemoteBackup(device, id); setNotice({ kind: 'success', text: 'Remote backup deleted.' }); await load(); } catch (error) { setNotice({ kind: 'error', text: String(error) }); } }
-  return <section className="workspace"><div className="section-heading"><div><h1>Authentication backups</h1><p>Restore named profiles from the central node when moving between devices.</p></div><button className="secondary" onClick={() => void load()}>Refresh backups</button></div><Notice kind="warning">Authentication backups contain plaintext credentials and are intended only for a trusted local network.</Notice><div className="backup-actions"><strong>Upload a local profile</strong>{profiles.length === 0 && <span className="empty-inline">No local profiles yet.</span>}{profiles.map((profile) => <button className="secondary" key={profile.id} onClick={() => void upload(profile.id)}>{profile.name}</button>)}</div><div className="profile-list">{backups.length === 0 && <div className="empty-inline">No remote backups found.</div>}{backups.map((backup) => <article className="profile-row" key={`${backup.device}:${backup.profile.id}`}><div><strong>{backup.profile.name}</strong><small>{backup.device} · {backup.profile.type} · {backup.profile.provider}</small></div><div className="button-row"><button className="secondary" onClick={() => void restore(backup.device, backup.profile.id)}>Restore</button><button className="danger" onClick={() => void remove(backup.device, backup.profile.id)}>Delete</button></div></article>)}</div></section>;
-}
 function Menu({ bootstrap, onRefresh, onSettings, onClose }: { bootstrap: Bootstrap; onRefresh: () => Promise<void>; onSettings: () => void; onClose: () => void }) { return <div className="menu-popover"><strong>Settings</strong><small>Central node: {bootstrap.centralHost}:{bootstrap.centralPort}</small><button onClick={() => { onSettings(); onClose(); }}>Central and Codex settings</button><button onClick={() => { void onRefresh(); onClose(); }}>Refresh configuration</button><button onClick={() => { void api?.OpenFolder(bootstrap.codexDir); onClose(); }}>Open Codex folder</button></div>; }
-function SettingsDialog({ bootstrap, onClose, setNotice }: { bootstrap: Bootstrap; onClose: () => void; setNotice: (value: { kind: NoticeKind; text: string } | null) => void }) {
+function SettingsDialog({ bootstrap, onSaved, onClose, setNotice }: { bootstrap: Bootstrap; onSaved: (bootstrap: Bootstrap) => void; onClose: () => void; setNotice: (value: { kind: NoticeKind; text: string } | null) => void }) {
   const [form, setForm] = useState<SettingsRequest>({ codexDir: bootstrap.codexDir, centralHost: bootstrap.centralHost, centralPort: bootstrap.centralPort, deviceName: bootstrap.deviceName });
   function update<K extends keyof SettingsRequest>(key: K, value: SettingsRequest[K]) { setForm({ ...form, [key]: value }); }
-  async function save() { if (!api) return; try { const result = await api.SaveSettings(form); setNotice({ kind: 'success', text: result.restartRequired ? 'Settings saved. Restart AgentPal to apply the Codex directory change.' : 'Settings saved. Refresh to connect with the new center address.' }); onClose(); } catch (error) { setNotice({ kind: 'error', text: String(error) }); } }
+  async function save() { if (!api) return; try { const result = await api.SaveSettings(form); onSaved(result); setNotice({ kind: 'success', text: result.restartRequired ? 'Settings saved. Restart AgentPal to apply the Codex directory change.' : 'Settings saved. Refresh to connect with the new center address.' }); onClose(); } catch (error) { setNotice({ kind: 'error', text: String(error) }); } }
   return <div className="dialog-backdrop"><div className="dialog"><div className="section-heading"><h2>AgentPal settings</h2><button className="icon-button" onClick={onClose}>×</button></div><label className="field"><span>Central host</span><input value={form.centralHost} onChange={(event) => update('centralHost', event.target.value)} /></label><label className="field"><span>Central port</span><input type="number" value={form.centralPort} onChange={(event) => update('centralPort', Number(event.target.value))} /></label><label className="field"><span>Codex directory</span><input value={form.codexDir} onChange={(event) => update('codexDir', event.target.value)} /></label><label className="field"><span>Device name</span><input value={form.deviceName} onChange={(event) => update('deviceName', event.target.value)} /></label><div className="button-row"><button className="secondary" onClick={onClose}>Cancel</button><button className="primary" onClick={() => void save()}>Save settings</button></div></div></div>;
 }
 type NoticeKind = 'info' | 'success' | 'warning' | 'error';

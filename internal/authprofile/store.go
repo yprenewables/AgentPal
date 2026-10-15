@@ -53,7 +53,7 @@ func (s *Store) List() ([]AuthProfile, error) {
 		if !entry.IsDir() {
 			continue
 		}
-		if strings.HasPrefix(entry.Name(), ".agentpal-auth-import-") || strings.HasPrefix(entry.Name(), ".agentpal-auth-backup-") {
+		if strings.HasPrefix(entry.Name(), ".agentpal-auth-import-") {
 			continue
 		}
 		p, err := readSavedProfile(filepath.Join(s.Root, entry.Name()))

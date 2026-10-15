@@ -38,16 +38,8 @@ export function DeleteAuthProfile(arg1) {
   return window['go']['main']['App']['DeleteAuthProfile'](arg1);
 }
 
-export function DeleteRemoteBackup(arg1, arg2) {
-  return window['go']['main']['App']['DeleteRemoteBackup'](arg1, arg2);
-}
-
-export function GetBackupExamplePath() {
-  return window['go']['main']['App']['GetBackupExamplePath']();
-}
-
-export function GetBackupRoot() {
-  return window['go']['main']['App']['GetBackupRoot']();
+export function DiscoverModels() {
+  return window['go']['main']['App']['DiscoverModels']();
 }
 
 export function GetBootstrap() {
@@ -66,8 +58,16 @@ export function GetDefaultCodexDir() {
   return window['go']['main']['App']['GetDefaultCodexDir']();
 }
 
+export function GetDefaultModelSettings() {
+  return window['go']['main']['App']['GetDefaultModelSettings']();
+}
+
 export function GetDefaultProfileTemplate() {
   return window['go']['main']['App']['GetDefaultProfileTemplate']();
+}
+
+export function GetModelManagementState() {
+  return window['go']['main']['App']['GetModelManagementState']();
 }
 
 export function GetRawProfileContent(arg1) {
@@ -84,10 +84,6 @@ export function ImportCurrentAuth(arg1) {
 
 export function ListAuthProfiles() {
   return window['go']['main']['App']['ListAuthProfiles']();
-}
-
-export function ListRemoteBackups() {
-  return window['go']['main']['App']['ListRemoteBackups']();
 }
 
 export function LogoutCentralLogin() {
@@ -114,8 +110,12 @@ export function RefreshConfiguration() {
   return window['go']['main']['App']['RefreshConfiguration']();
 }
 
-export function RestoreAuthProfile(arg1, arg2) {
-  return window['go']['main']['App']['RestoreAuthProfile'](arg1, arg2);
+export function SaveDefaultModelSettings(arg1) {
+  return window['go']['main']['App']['SaveDefaultModelSettings'](arg1);
+}
+
+export function SaveModels(arg1) {
+  return window['go']['main']['App']['SaveModels'](arg1);
 }
 
 export function SaveSettings(arg1) {
@@ -136,8 +136,4 @@ export function UpdateAPIKeyProfile(arg1, arg2) {
 
 export function UpdateRawProfile(arg1, arg2) {
   return window['go']['main']['App']['UpdateRawProfile'](arg1, arg2);
-}
-
-export function UploadAuthProfile(arg1, arg2) {
-  return window['go']['main']['App']['UploadAuthProfile'](arg1, arg2);
 }

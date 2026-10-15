@@ -28,6 +28,25 @@ func TestDisconnectedRefreshHasEmptyItems(t *testing.T) {
 	}
 }
 
+func TestConfigurationManifestFailureHasScopedMessage(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusInternalServerError) }))
+	defer server.Close()
+	app, state, _ := setupCurrentAuthApp(t, `{"OPENAI_API_KEY":"secret"}`, "")
+	host, port, err := net.SplitHostPort(strings.TrimPrefix(server.URL, "http://"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	state.CentralHost = host
+	state.CentralPort, _ = strconv.Atoi(port)
+	if err := appconfig.WriteState(state); err != nil {
+		t.Fatal(err)
+	}
+	result, err := app.RefreshConfiguration()
+	if err != nil || result.Connected || result.Error != "Central 配置清单读取失败" {
+		t.Fatalf("result=%+v err=%v", result, err)
+	}
+}
+
 func TestProfileTypeKeepsEachSavedProfileConfiguration(t *testing.T) {
 	profile := authprofile.AuthProfile{ID: "profile-1", Name: "Saved", Type: "api_key", Provider: "saved-provider", APIKeyPreview: "sk-••••1234", BaseURL: "https://saved.example/v1"}
 	got := profileType(profile)

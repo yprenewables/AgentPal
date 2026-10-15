@@ -2,12 +2,10 @@ package authprofile
 
 import (
 	"agentpal/internal/codex"
-	appconfig "agentpal/internal/config"
 	"agentpal/internal/types"
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"time"
 )
 
 func (s *Store) Preview(codexDir, profileID string) (types.ProfileSwitchPreview, error) {
@@ -34,20 +32,6 @@ func (s *Store) Activate(codexDir, profileID string, allowProviderConflict ...bo
 	if conflict && (len(allowProviderConflict) == 0 || !allowProviderConflict[0]) {
 		return types.ProfileSwitchResult{Profile: types.AuthProfile{ID: p.ID, Name: p.Name, Type: p.Type, Provider: p.Provider, Source: p.Source}, ProviderConflict: true, ConflictDescription: description, ProfileProvider: profileProvider, LocalProvider: localProvider}, nil
 	}
-	root, err := appconfig.BackupRoot()
-	if err != nil {
-		return types.ProfileSwitchResult{}, err
-	}
-	backup := filepath.Join(root, time.Now().Format("20060102-150405.000-auth"))
-	if err := os.MkdirAll(backup, 0o700); err != nil {
-		return types.ProfileSwitchResult{}, err
-	}
-	if err := copyIfExists(filepath.Join(codexDir, "auth.json"), filepath.Join(backup, "auth.json")); err != nil {
-		return types.ProfileSwitchResult{}, err
-	}
-	if err := copyIfExists(filepath.Join(codexDir, "config.toml"), filepath.Join(backup, "config.toml")); err != nil {
-		return types.ProfileSwitchResult{}, err
-	}
 	if err := os.WriteFile(filepath.Join(codexDir, "auth.json.agentpal.tmp"), auth, 0o600); err != nil {
 		return types.ProfileSwitchResult{}, err
 	}
@@ -55,19 +39,15 @@ func (s *Store) Activate(codexDir, profileID string, allowProviderConflict ...bo
 		return types.ProfileSwitchResult{}, err
 	}
 	if err := codex.MergeAuthConfig(filepath.Join(codexDir, "config.toml"), fragment); err != nil {
-		_ = restoreFile(filepath.Join(backup, "auth.json"), filepath.Join(codexDir, "auth.json"))
-		_ = restoreFile(filepath.Join(backup, "config.toml"), filepath.Join(codexDir, "config.toml"))
 		return types.ProfileSwitchResult{}, err
 	}
 	if err := codex.EnsureProviderBearerToken(filepath.Join(codexDir, "config.toml"), auth); err != nil {
-		_ = restoreFile(filepath.Join(backup, "auth.json"), filepath.Join(codexDir, "auth.json"))
-		_ = restoreFile(filepath.Join(backup, "config.toml"), filepath.Join(codexDir, "config.toml"))
 		return types.ProfileSwitchResult{}, err
 	}
 	if err := os.WriteFile(filepath.Join(s.Root, "active.json"), []byte(p.ID), 0o600); err != nil {
 		return types.ProfileSwitchResult{}, err
 	}
-	return types.ProfileSwitchResult{OK: true, Profile: types.AuthProfile{ID: p.ID, Name: p.Name, Type: p.Type, Provider: p.Provider, Source: p.Source, Active: true}, BackupPath: backup}, nil
+	return types.ProfileSwitchResult{OK: true, Profile: types.AuthProfile{ID: p.ID, Name: p.Name, Type: p.Type, Provider: p.Provider, Source: p.Source, Active: true}}, nil
 }
 
 // ActivateRemote applies a profile fetched directly from the central server without persisting it in the local profile store.
@@ -87,20 +67,6 @@ func ActivateRemote(codexDir string, p AuthProfile, auth, fragment []byte, allow
 	if conflict && !allowProviderConflict {
 		return types.ProfileSwitchResult{Profile: types.AuthProfile{Name: p.Name, Type: p.Type, Provider: p.Provider, Source: p.Source}, ProviderConflict: true, ConflictDescription: description, ProfileProvider: profileProvider, LocalProvider: localProvider}, nil
 	}
-	root, err := appconfig.BackupRoot()
-	if err != nil {
-		return types.ProfileSwitchResult{}, err
-	}
-	backup := filepath.Join(root, time.Now().Format("20060102-150405.000-auth"))
-	if err := os.MkdirAll(backup, 0o700); err != nil {
-		return types.ProfileSwitchResult{}, err
-	}
-	if err := copyIfExists(filepath.Join(codexDir, "auth.json"), filepath.Join(backup, "auth.json")); err != nil {
-		return types.ProfileSwitchResult{}, err
-	}
-	if err := copyIfExists(filepath.Join(codexDir, "config.toml"), filepath.Join(backup, "config.toml")); err != nil {
-		return types.ProfileSwitchResult{}, err
-	}
 	if err := os.WriteFile(filepath.Join(codexDir, "auth.json.agentpal.tmp"), auth, 0o600); err != nil {
 		return types.ProfileSwitchResult{}, err
 	}
@@ -109,16 +75,12 @@ func ActivateRemote(codexDir string, p AuthProfile, auth, fragment []byte, allow
 	}
 	configPath := filepath.Join(codexDir, "config.toml")
 	if err := codex.MergeAuthConfig(configPath, fragment); err != nil {
-		_ = restoreFile(filepath.Join(backup, "auth.json"), filepath.Join(codexDir, "auth.json"))
-		_ = restoreFile(filepath.Join(backup, "config.toml"), configPath)
 		return types.ProfileSwitchResult{}, err
 	}
 	if err := codex.EnsureProviderBearerToken(configPath, auth); err != nil {
-		_ = restoreFile(filepath.Join(backup, "auth.json"), filepath.Join(codexDir, "auth.json"))
-		_ = restoreFile(filepath.Join(backup, "config.toml"), configPath)
 		return types.ProfileSwitchResult{}, err
 	}
-	return types.ProfileSwitchResult{OK: true, Profile: types.AuthProfile{Name: p.Name, Type: p.Type, Provider: p.Provider, Source: p.Source, Active: true}, BackupPath: backup}, nil
+	return types.ProfileSwitchResult{OK: true, Profile: types.AuthProfile{Name: p.Name, Type: p.Type, Provider: p.Provider, Source: p.Source, Active: true}}, nil
 }
 
 func (s *Store) loadProfile(profileID string) (AuthProfile, []byte, error) {
@@ -156,26 +118,4 @@ func (s *Store) loadProfileForActivation(profileID string) (AuthProfile, []byte,
 		return AuthProfile{}, nil, nil, err
 	}
 	return p, auth, fragment, nil
-}
-
-func copyIfExists(src, dst string) error {
-	data, err := os.ReadFile(src)
-	if os.IsNotExist(err) {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(dst, data, 0o600)
-}
-
-func restoreFile(src, dst string) error {
-	data, err := os.ReadFile(src)
-	if os.IsNotExist(err) {
-		return os.Remove(dst)
-	}
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(dst, data, 0o600)
 }

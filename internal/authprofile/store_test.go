@@ -49,7 +49,7 @@ func TestListUsesSavedAuthAndModelConfigurationAsProfile(t *testing.T) {
 		t.Fatal(err)
 	}
 	profileDir := filepath.Join(store.Root, profile.ID)
-	if err := os.WriteFile(filepath.Join(profileDir, "config-auth.toml"), []byte("model = \"model-from-backup\"\nmodel_provider = \"provider-from-backup\"\n\n[model_providers.provider-from-backup]\nbase_url = \"https://backup.example/v1\"\n"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(profileDir, "config-auth.toml"), []byte("model = \"saved-model\"\nmodel_provider = \"saved-provider\"\n\n[model_providers.saved-provider]\nbase_url = \"https://saved.example/v1\"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(profileDir, "auth.json"), []byte(`{"OPENAI_API_KEY":"sk-secret-value"}`), 0o600); err != nil {
@@ -63,7 +63,7 @@ func TestListUsesSavedAuthAndModelConfigurationAsProfile(t *testing.T) {
 		t.Fatalf("profiles=%#v", profiles)
 	}
 	got := profiles[0]
-	if got.Provider != "provider-from-backup" || got.BaseURL != "https://backup.example/v1" {
+	if got.Provider != "saved-provider" || got.BaseURL != "https://saved.example/v1" {
 		t.Fatalf("profile not derived from saved config: %#v", got)
 	}
 	if got.APIKeyPreview != "sk-••••••alue" {
@@ -85,7 +85,7 @@ func TestListSkipsProfilesMissingSavedAuthOrConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(profiles) != 0 {
-		t.Fatalf("incomplete backup was listed: %#v", profiles)
+		t.Fatalf("incomplete profile was listed: %#v", profiles)
 	}
 }
 

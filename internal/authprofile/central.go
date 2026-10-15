@@ -2,7 +2,6 @@ package authprofile
 
 import (
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"time"
@@ -83,7 +82,7 @@ func (s *Store) SyncCentral(c CentralProfile) (AuthProfile, string, error) {
 		return AuthProfile{}, "error", err
 	}
 	if !found {
-		converted, rollback, err := s.prepareCentralImport(c)
+		converted, err := s.prepareCentralImport(c)
 		if err != nil {
 			return AuthProfile{}, "error", err
 		}
@@ -92,9 +91,6 @@ func (s *Store) SyncCentral(c CentralProfile) (AuthProfile, string, error) {
 		}
 		profile, err := s.AddCentral(c)
 		if err != nil {
-			if rollbackErr := rollback(); rollbackErr != nil {
-				return AuthProfile{}, "error", fmt.Errorf("create Central profile: %w; rollback failed: %v", err, rollbackErr)
-			}
 			return AuthProfile{}, "error", err
 		}
 		return profile, "added", nil

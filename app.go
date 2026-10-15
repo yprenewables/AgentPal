@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -100,7 +99,7 @@ func (a *App) RefreshConfiguration() (types.ConfigRefresh, error) {
 	client := centralclient.NewClient(nil, 6*time.Second)
 	manifest, err := client.Manifest(base)
 	if err != nil {
-		return disconnectedRefresh(err.Error()), nil
+		return disconnectedRefresh("Central 配置清单读取失败"), nil
 	}
 	dir, err := codex.ExpandPath(state.CodexDir)
 	if err != nil {
@@ -336,59 +335,6 @@ func centerBase(state appconfig.State) string {
 	return "http://" + state.CentralHost + ":" + strconv.Itoa(state.CentralPort)
 }
 
-func (a *App) ListRemoteBackups() ([]types.BackupInfo, error) {
-	state, err := appconfig.ReadState()
-	if err != nil {
-		return nil, err
-	}
-	backups, err := centralclient.NewClient(nil, 6*time.Second).ListBackups(centerBase(state))
-	if err != nil {
-		return nil, err
-	}
-	return backups, nil
-}
-
-func (a *App) UploadAuthProfile(id string, overwrite bool) error {
-	root, err := codex.ExpandPath("~/.agentpal/auth-profiles")
-	if err != nil {
-		return err
-	}
-	var archive bytes.Buffer
-	if err := authprofile.Pack(filepath.Join(root, id), &archive); err != nil {
-		return err
-	}
-	state, err := appconfig.ReadState()
-	if err != nil {
-		return err
-	}
-	return centralclient.NewClient(nil, 60*time.Second).UploadBackup(centerBase(state), state.DeviceName, id, bytes.NewReader(archive.Bytes()), overwrite)
-}
-
-func (a *App) RestoreAuthProfile(device, id string) (types.AuthProfile, error) {
-	state, err := appconfig.ReadState()
-	if err != nil {
-		return types.AuthProfile{}, err
-	}
-	data, err := centralclient.NewClient(nil, 60*time.Second).DownloadBackup(centerBase(state), device, id)
-	if err != nil {
-		return types.AuthProfile{}, err
-	}
-	root, err := codex.ExpandPath("~/.agentpal/auth-profiles")
-	if err != nil {
-		return types.AuthProfile{}, err
-	}
-	profile, err := authprofile.Unpack(bytes.NewReader(data), int64(len(data)), root)
-	return profileType(profile), err
-}
-
-func (a *App) DeleteRemoteBackup(device, id string) error {
-	state, err := appconfig.ReadState()
-	if err != nil {
-		return err
-	}
-	return centralclient.NewClient(nil, 6*time.Second).DeleteBackup(centerBase(state), device, id)
-}
-
 func bootstrapFromState(state appconfig.State, restartRequired bool) (types.Bootstrap, error) {
 	codexDir, err := codex.ExpandPath(state.CodexDir)
 	if err != nil {
@@ -399,18 +345,6 @@ func bootstrapFromState(state appconfig.State, restartRequired bool) (types.Boot
 		CentralPort: state.CentralPort, DeviceName: state.DeviceName,
 		Version: constants.AppVersion, RestartRequired: restartRequired,
 	}, nil
-}
-
-func (a *App) GetBackupRoot() (string, error) {
-	return appconfig.BackupRoot()
-}
-
-func (a *App) GetBackupExamplePath() (string, error) {
-	root, err := appconfig.BackupRoot()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(root, "YYYYMMDD-HHMMSS"), nil
 }
 
 func (a *App) CheckForUpdate() (types.UpdateInfo, error) {

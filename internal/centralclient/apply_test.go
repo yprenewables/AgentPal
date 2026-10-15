@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -13,7 +14,7 @@ import (
 	"agentpal/internal/types"
 )
 
-func TestApplyConfigurationDownloadsAndBacksUpSelectedChanges(t *testing.T) {
+func TestApplyConfigurationDownloadsSelectedChanges(t *testing.T) {
 	source := centraltest.MakeCodexDir(t)
 	target := centraltest.MakeCodexDir(t)
 	if err := os.WriteFile(filepath.Join(target, "skills", "translate", "SKILL.md"), []byte("old"), 0o600); err != nil {
@@ -33,11 +34,31 @@ func TestApplyConfigurationDownloadsAndBacksUpSelectedChanges(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !result.OK || result.BackupPath == "" {
+	if !result.OK {
 		t.Fatalf("result: %#v", result)
 	}
 	data, _ := os.ReadFile(filepath.Join(target, "skills", "translate", "SKILL.md"))
 	if string(data) != "one" {
 		t.Fatalf("skill = %q", data)
+	}
+}
+
+func TestApplyConfigurationDeletesSelectedMCP(t *testing.T) {
+	target := centraltest.MakeCodexDir(t)
+	configPath := filepath.Join(target, "config.toml")
+	if err := os.WriteFile(configPath, []byte("[mcp_servers.remove]\ncommand = \"remove\"\n\n[mcp_servers.keep]\ncommand = \"keep\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := Apply(context.Background(), NewClient(nil, 2*time.Second), "http://unused", target, types.CenterManifest{}, []types.ApplyChange{{Kind: "mcp", Name: "remove", Action: "delete"}})
+	if err != nil || !result.OK {
+		t.Fatalf("result=%#v err=%v", result, err)
+	}
+	config, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(config), "[mcp_servers.remove]") || !strings.Contains(string(config), "[mcp_servers.keep]") {
+		t.Fatalf("config=%s", config)
 	}
 }

@@ -1,15 +1,106 @@
+export namespace modelmanagement {
+
+	export class DefaultRequest {
+	    configHash: string;
+	    model: string;
+	    effort: string;
+
+	    static createFrom(source: any = {}) {
+	        return new DefaultRequest(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.configHash = source["configHash"];
+	        this.model = source["model"];
+	        this.effort = source["effort"];
+	    }
+	}
+	export class DefaultState {
+	    available: boolean;
+	    error?: string;
+	    configHash: string;
+	    model: string;
+	    effort: string;
+
+	    static createFrom(source: any = {}) {
+	        return new DefaultState(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.available = source["available"];
+	        this.error = source["error"];
+	        this.configHash = source["configHash"];
+	        this.model = source["model"];
+	        this.effort = source["effort"];
+	    }
+	}
+	export class SaveRequest {
+	    fileHash: string;
+	    models: number[][];
+	    rawModels?: string[];
+	    visibilityOverrides?: Record<number, string>;
+
+	    static createFrom(source: any = {}) {
+	        return new SaveRequest(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.fileHash = source["fileHash"];
+	        this.models = source["models"];
+	        this.rawModels = source["rawModels"];
+	        this.visibilityOverrides = source["visibilityOverrides"];
+	    }
+	}
+	export class State {
+	    available: boolean;
+	    error?: string;
+	    provider: string;
+	    baseUrl: string;
+	    discoveryError?: string;
+	    fileValid: boolean;
+	    writable: boolean;
+	    fileExists: boolean;
+	    fileHash: string;
+	    models: number[][];
+	    rawModels: string[];
+
+	    static createFrom(source: any = {}) {
+	        return new State(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.available = source["available"];
+	        this.error = source["error"];
+	        this.provider = source["provider"];
+	        this.baseUrl = source["baseUrl"];
+	        this.discoveryError = source["discoveryError"];
+	        this.fileValid = source["fileValid"];
+	        this.writable = source["writable"];
+	        this.fileExists = source["fileExists"];
+	        this.fileHash = source["fileHash"];
+	        this.models = source["models"];
+	        this.rawModels = source["rawModels"];
+	    }
+	}
+
+}
+
 export namespace types {
-	
+
 	export class APIKeyProfileRequest {
 	    name: string;
 	    provider: string;
 	    baseUrl: string;
 	    apiKey: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new APIKeyProfileRequest(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.name = source["name"];
@@ -22,11 +113,11 @@ export namespace types {
 	    kind: string;
 	    name: string;
 	    action: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new ApplyChange(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.kind = source["kind"];
@@ -39,11 +130,11 @@ export namespace types {
 	    centralHost: string;
 	    centralPort: number;
 	    changes: ApplyChange[];
-	
+
 	    static createFrom(source: any = {}) {
 	        return new ApplyRequest(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.codexDir = source["codexDir"];
@@ -51,7 +142,7 @@ export namespace types {
 	        this.centralPort = source["centralPort"];
 	        this.changes = this.convertValues(source["changes"], ApplyChange);
 	    }
-	
+
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -72,19 +163,15 @@ export namespace types {
 	}
 	export class ApplyResult {
 	    ok: boolean;
-	    backupPath: string;
-	    rolledBack: boolean;
 	    applied: string[];
-	
+
 	    static createFrom(source: any = {}) {
 	        return new ApplyResult(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.ok = source["ok"];
-	        this.backupPath = source["backupPath"];
-	        this.rolledBack = source["rolledBack"];
 	        this.applied = source["applied"];
 	    }
 	}
@@ -102,11 +189,11 @@ export namespace types {
 	    currentProfileId?: string;
 	    reservedName?: string;
 	    contentHash?: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new AuthProfile(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
@@ -128,11 +215,11 @@ export namespace types {
 	    name: string;
 	    status: string;
 	    detail?: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new AuthSyncItem(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.name = source["name"];
@@ -142,53 +229,16 @@ export namespace types {
 	}
 	export class AuthSyncReport {
 	    items: AuthSyncItem[];
-	
+
 	    static createFrom(source: any = {}) {
 	        return new AuthSyncReport(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.items = this.convertValues(source["items"], AuthSyncItem);
 	    }
-	
-		convertValues(a: any, classs: any, asMap: boolean = false): any {
-		    if (!a) {
-		        return a;
-		    }
-		    if (a.slice && a.map) {
-		        return (a as any[]).map(elem => this.convertValues(elem, classs));
-		    } else if ("object" === typeof a) {
-		        if (asMap) {
-		            for (const key of Object.keys(a)) {
-		                a[key] = new classs(a[key]);
-		            }
-		            return a;
-		        }
-		        return new classs(a);
-		    }
-		    return a;
-		}
-	}
-	export class BackupInfo {
-	    device: string;
-	    profile: AuthProfile;
-	    size: number;
-	    // Go type: time
-	    updatedAt: any;
-	
-	    static createFrom(source: any = {}) {
-	        return new BackupInfo(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.device = source["device"];
-	        this.profile = this.convertValues(source["profile"], AuthProfile);
-	        this.size = source["size"];
-	        this.updatedAt = this.convertValues(source["updatedAt"], null);
-	    }
-	
+
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -214,11 +264,11 @@ export namespace types {
 	    deviceName: string;
 	    version: string;
 	    restartRequired: boolean;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new Bootstrap(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.codexDir = source["codexDir"];
@@ -233,11 +283,11 @@ export namespace types {
 	    name: string;
 	    sha256: string;
 	    size: number;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new CenterMCP(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.name = source["name"];
@@ -248,11 +298,11 @@ export namespace types {
 	export class ScanError {
 	    path: string;
 	    error: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new ScanError(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.path = source["path"];
@@ -263,11 +313,11 @@ export namespace types {
 	    path: string;
 	    sha256: string;
 	    size: number;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new FileEntry(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.path = source["path"];
@@ -280,11 +330,11 @@ export namespace types {
 	    sha256: string;
 	    files: FileEntry[];
 	    size: number;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new CenterSkill(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.name = source["name"];
@@ -292,7 +342,7 @@ export namespace types {
 	        this.files = this.convertValues(source["files"], FileEntry);
 	        this.size = source["size"];
 	    }
-	
+
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -320,11 +370,11 @@ export namespace types {
 	    skills: CenterSkill[];
 	    mcp: CenterMCP[];
 	    errors?: ScanError[];
-	
+
 	    static createFrom(source: any = {}) {
 	        return new CenterManifest(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.schema = source["schema"];
@@ -335,7 +385,7 @@ export namespace types {
 	        this.mcp = this.convertValues(source["mcp"], CenterMCP);
 	        this.errors = this.convertValues(source["errors"], ScanError);
 	    }
-	
+
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -354,7 +404,7 @@ export namespace types {
 		    return a;
 		}
 	}
-	
+
 	export class CentralLoginState {
 	    loggedIn: boolean;
 	    subject?: string;
@@ -363,11 +413,11 @@ export namespace types {
 	    email?: string;
 	    // Go type: time
 	    expiresAt?: any;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new CentralLoginState(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.loggedIn = source["loggedIn"];
@@ -377,7 +427,7 @@ export namespace types {
 	        this.email = source["email"];
 	        this.expiresAt = this.convertValues(source["expiresAt"], null);
 	    }
-	
+
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -401,11 +451,11 @@ export namespace types {
 	    name: string;
 	    status: string;
 	    selected: boolean;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new DiffItem(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.kind = source["kind"];
@@ -416,16 +466,16 @@ export namespace types {
 	}
 	export class ConfigDiff {
 	    items: DiffItem[];
-	
+
 	    static createFrom(source: any = {}) {
 	        return new ConfigDiff(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.items = this.convertValues(source["items"], DiffItem);
 	    }
-	
+
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -449,11 +499,11 @@ export namespace types {
 	    error?: string;
 	    manifest: CenterManifest;
 	    diff: ConfigDiff;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new ConfigRefresh(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.connected = source["connected"];
@@ -461,7 +511,7 @@ export namespace types {
 	        this.manifest = this.convertValues(source["manifest"], CenterManifest);
 	        this.diff = this.convertValues(source["diff"], ConfigDiff);
 	    }
-	
+
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -489,11 +539,11 @@ export namespace types {
 	    apiKeyImported: boolean;
 	    chatgptImported: boolean;
 	    currentProfileId?: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new CurrentAuthStatus(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.provider = source["provider"];
@@ -506,19 +556,19 @@ export namespace types {
 	        this.currentProfileId = source["currentProfileId"];
 	    }
 	}
-	
-	
+
+
 	export class LoginStart {
 	    loginId: string;
 	    pollToken: string;
 	    authorizeUrl: string;
 	    // Go type: time
 	    expiresAt: any;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new LoginStart(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.loginId = source["loginId"];
@@ -526,7 +576,7 @@ export namespace types {
 	        this.authorizeUrl = source["authorizeUrl"];
 	        this.expiresAt = this.convertValues(source["expiresAt"], null);
 	    }
-	
+
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -554,11 +604,11 @@ export namespace types {
 	    accessToken?: string;
 	    expiresIn?: number;
 	    error?: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new LoginStatus(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.status = source["status"];
@@ -578,11 +628,11 @@ export namespace types {
 	    conflictDescription?: string;
 	    profileProvider?: string;
 	    localProvider?: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new ProfileSwitchPreview(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.profile = this.convertValues(source["profile"], AuthProfile);
@@ -592,7 +642,7 @@ export namespace types {
 	        this.profileProvider = source["profileProvider"];
 	        this.localProvider = source["localProvider"];
 	    }
-	
+
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -614,27 +664,25 @@ export namespace types {
 	export class ProfileSwitchResult {
 	    ok: boolean;
 	    profile: AuthProfile;
-	    backupPath: string;
 	    providerConflict: boolean;
 	    conflictDescription?: string;
 	    profileProvider?: string;
 	    localProvider?: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new ProfileSwitchResult(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.ok = source["ok"];
 	        this.profile = this.convertValues(source["profile"], AuthProfile);
-	        this.backupPath = source["backupPath"];
 	        this.providerConflict = source["providerConflict"];
 	        this.conflictDescription = source["conflictDescription"];
 	        this.profileProvider = source["profileProvider"];
 	        this.localProvider = source["localProvider"];
 	    }
-	
+
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -656,11 +704,11 @@ export namespace types {
 	export class RawProfileContent {
 	    authJson: string;
 	    configToml: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new RawProfileContent(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.authJson = source["authJson"];
@@ -671,11 +719,11 @@ export namespace types {
 	    name: string;
 	    authJson: string;
 	    configToml: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new RawProfileRequest(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.name = source["name"];
@@ -683,17 +731,17 @@ export namespace types {
 	        this.configToml = source["configToml"];
 	    }
 	}
-	
+
 	export class SettingsRequest {
 	    codexDir: string;
 	    centralHost: string;
 	    centralPort: number;
 	    deviceName: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new SettingsRequest(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.codexDir = source["codexDir"];
@@ -706,11 +754,11 @@ export namespace types {
 	    name: string;
 	    url: string;
 	    size: number;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new UpdateAsset(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.name = source["name"];
@@ -724,11 +772,11 @@ export namespace types {
 	    hasUpdate: boolean;
 	    releaseUrl: string;
 	    assets: UpdateAsset[];
-	
+
 	    static createFrom(source: any = {}) {
 	        return new UpdateInfo(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.currentVersion = source["currentVersion"];
@@ -737,7 +785,7 @@ export namespace types {
 	        this.releaseUrl = source["releaseUrl"];
 	        this.assets = this.convertValues(source["assets"], UpdateAsset);
 	    }
-	
+
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;

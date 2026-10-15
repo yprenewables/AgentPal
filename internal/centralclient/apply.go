@@ -10,10 +10,8 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"time"
 
 	"agentpal/internal/codex"
-	appconfig "agentpal/internal/config"
 	"agentpal/internal/types"
 )
 
@@ -55,65 +53,40 @@ func Apply(ctx context.Context, client Client, base, target string, manifest typ
 			}
 		}
 	}
-	backupRoot, err := appconfig.BackupRoot()
-	if err != nil {
-		return types.ApplyResult{}, err
-	}
-	backup := filepath.Join(backupRoot, time.Now().Format("20060102-150405.000"))
-	if err := os.MkdirAll(backup, 0o700); err != nil {
-		return types.ApplyResult{}, err
-	}
-	if err := copyIfExists(filepath.Join(target, "skills"), filepath.Join(backup, "skills")); err != nil {
-		return types.ApplyResult{}, err
-	}
-	if err := copyIfExists(filepath.Join(target, "config.toml"), filepath.Join(backup, "config.toml")); err != nil {
-		return types.ApplyResult{}, err
-	}
-	result := types.ApplyResult{OK: true, BackupPath: backup}
+	result := types.ApplyResult{OK: true}
 	for _, change := range changes {
 		key := change.Kind + ":" + change.Name
 		if change.Action == "delete" {
 			if change.Kind == "skill" {
 				_ = os.RemoveAll(filepath.Join(target, "skills", change.Name))
-			} else {
-				current, _ := codex.ReadMCP(filepath.Join(target, "config.toml"))
-				_ = current
+			} else if change.Kind == "mcp" {
+				if err := codex.UpsertMCP(filepath.Join(target, "config.toml"), nil, []string{change.Name}); err != nil {
+					return types.ApplyResult{}, err
+				}
 			}
 		} else if change.Action == "apply" {
 			if change.Kind == "skill" {
 				src := filepath.Join(temp, "skills", change.Name)
 				dst := filepath.Join(target, "skills", change.Name)
 				if err := os.RemoveAll(dst); err != nil {
-					return rollbackApply(result, backup, target, err)
+					return types.ApplyResult{}, err
 				}
 				if err := copyIfExists(src, dst); err != nil {
-					return rollbackApply(result, backup, target, err)
+					return types.ApplyResult{}, err
 				}
 			} else if change.Kind == "mcp" {
 				data, err := os.ReadFile(filepath.Join(temp, "mcp", change.Name+".toml"))
 				if err != nil {
-					return rollbackApply(result, backup, target, err)
+					return types.ApplyResult{}, err
 				}
 				if err := codex.UpsertMCP(filepath.Join(target, "config.toml"), []codex.MCPEntry{{Name: change.Name, TOML: data}}, nil); err != nil {
-					return rollbackApply(result, backup, target, err)
+					return types.ApplyResult{}, err
 				}
-			}
-		} else if change.Action == "delete" && change.Kind == "mcp" {
-			if err := codex.UpsertMCP(filepath.Join(target, "config.toml"), nil, []string{change.Name}); err != nil {
-				return rollbackApply(result, backup, target, err)
 			}
 		}
 		result.Applied = append(result.Applied, key)
 	}
 	return result, nil
-}
-func rollbackApply(result types.ApplyResult, backup, target string, cause error) (types.ApplyResult, error) {
-	_ = os.RemoveAll(filepath.Join(target, "skills"))
-	_ = copyIfExists(filepath.Join(backup, "skills"), filepath.Join(target, "skills"))
-	_ = copyIfExists(filepath.Join(backup, "config.toml"), filepath.Join(target, "config.toml"))
-	result.OK = false
-	result.RolledBack = true
-	return result, fmt.Errorf("configuration apply rolled back: %w", cause)
 }
 func downloadVerified(ctx context.Context, client Client, base, remote, local, want string) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/v1/config/files/"+remote, nil)

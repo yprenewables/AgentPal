@@ -44,7 +44,6 @@ h2 { font-size:19px; }
 .primary { background:#1f7a6d; border:1px solid #1f7a6d; color:#fff; }.secondary { background:#fff; border:1px solid #cbd6e2; color:#172033; }
 .danger { background:#fff1f1; border:1px solid #ffc8c8; border-radius:7px; color:#9a1f1f; padding:10px 14px; }
 .button-row { display:flex; flex-wrap:wrap; gap:8px; }
-.backup-actions { align-items:center; border:1px solid #dce3eb; border-radius:8px; display:flex; flex-wrap:wrap; gap:8px; margin-bottom:18px; padding:12px; }
 .current-auth { background:#f7fafc; border:1px solid #dce3eb; border-radius:8px; margin-bottom:18px; padding:12px 14px; }.current-auth-line { align-items:center; display:flex; flex-wrap:wrap; gap:10px; }.current-auth-line strong { font-size:13px; }.current-auth-line span { color:#667385; font-size:12px; }.current-auth-line button { margin-left:auto; padding:7px 10px; }.profile-main { display:grid; gap:4px; min-width:0; }.profile-title-line { align-items:center; display:flex; flex-wrap:wrap; gap:8px; }.profile-title-line strong { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }.profile-actions { align-items:center; display:flex; gap:8px; margin-left:auto; }.profile-actions.inline { align-items:center; display:flex; flex-direction:row; flex-wrap:nowrap; gap:6px; justify-content:flex-end; min-width:184px; }.profile-actions.inline .badge { order:1; }.profile-actions.inline .icon-btn { order:2; }.profile-actions.inline .more-menu-wrapper { order:3; }
 .more-menu-wrapper { position:relative; }
 .more-menu { background:#fff; border:1px solid #cbd6e2; border-radius:6px; box-shadow:0 4px 12px rgba(23,32,51,.15); min-width:120px; padding:4px; position:absolute; right:0; top:calc(100% + 4px); z-index:10; }
@@ -86,3 +85,21 @@ button.primary.compact { min-width:4rem; }
 .diff-column strong { font-size:13px; font-weight:700; }
 .diff-column pre { background:#f7fafc; border:1px solid #cbd6e2; border-radius:6px; color:#172033; font-family:'SF Mono',Monaco,'Cascadia Code','Roboto Mono',Consolas,'Courier New',monospace; font-size:12px; line-height:1.5; margin:0; max-height:20rem; overflow:auto; padding:.75rem; white-space:pre-wrap; word-break:break-all; }
 @media(max-width:680px) { .diff-columns { grid-template-columns:1fr; } }
+.models-status { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; color: #64748b; font-size: 13px; }
+.models-select-all { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:8px 12px; font-size:13px; color:#667385; }
+.model-row { grid-template-columns:minmax(0,1fr) auto; }
+.model-row .profile-main { min-width:0; }
+.model-row .profile-main strong,.model-row .profile-main small { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.model-row .profile-actions.inline { min-width:0; gap:14px; }
+.model-visibility { display:inline-flex; position:relative; width:36px; height:22px; flex-shrink:0; cursor:pointer; }
+.model-visibility input { position:absolute; inset:0; opacity:0; margin:0; width:100%; height:100%; cursor:pointer; }
+.model-visibility span { width:36px; height:22px; border-radius:12px; background:#cbd6e2; pointer-events:none; transition:background .15s; }
+.model-visibility span::after { content:''; display:block; width:18px; height:18px; margin:2px; border-radius:50%; background:white; box-shadow:0 1px 3px #0002; transition:transform .15s; }
+.model-visibility input:checked + span { background:#1f7a6d; }
+.model-visibility input:checked + span::after { transform:translateX(14px); }
+.model-visibility input:focus-visible + span { outline:2px solid #1f7a6d; outline-offset:3px; }
+.model-visibility input:disabled + span { opacity:.5; }
+.model-defaults { display:grid; grid-template-columns:minmax(0,1fr) 160px auto; gap:14px; align-items:end; padding:16px; margin-bottom:18px; border:1px solid #dce3eb; border-radius:8px; background:#f7fafc; }
+.model-defaults .field { margin:0; min-width:0; }
+.model-defaults select { font:inherit; width:100%; border:1px solid #cbd6e2; border-radius:7px; padding:10px; background:white; }
+@media(max-width:680px) { .model-defaults { grid-template-columns:minmax(0,1fr); }.model-row { grid-template-columns:minmax(0,1fr) auto; }.model-row .profile-actions.inline { min-width:0; gap:8px; } }
