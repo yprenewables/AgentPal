@@ -22,7 +22,7 @@ func TestActivatePreservesMCPAndProjects(t *testing.T) {
 	}
 	data, _ := os.ReadFile(filepath.Join(codexDir, "config.toml"))
 	got := string(data)
-	if !strings.Contains(got, "[mcp_servers.keep]") || !strings.Contains(got, "[projects.demo]") || !strings.Contains(got, "model = \"old\"") || !strings.Contains(got, "[model_providers.corp]") || !strings.Contains(got, "name = \"corp\"") {
+	if !strings.Contains(got, "[mcp_servers.keep]") || !strings.Contains(got, "[projects.demo]") || strings.Contains(got, "model = \"old\"") || !strings.Contains(got, "[model_providers.corp]") || !strings.Contains(got, "name = \"corp\"") {
 		t.Fatalf("config: %s", got)
 	}
 }

@@ -62,5 +62,15 @@ func (a *App) SaveDefaultModelSettings(req modelmanagement.DefaultRequest) (mode
 	if err != nil {
 		return modelmanagement.DefaultState{}, err
 	}
-	return s.SaveDefaults(req)
+	root, err := codex.ExpandPath("~/.agentpal/auth-profiles")
+	if err != nil {
+		return modelmanagement.DefaultState{}, err
+	}
+	var result modelmanagement.DefaultState
+	err = authprofile.NewStore(root).WithCurrentModels(s.Dir, func() error {
+		var saveErr error
+		result, saveErr = s.SaveDefaults(req)
+		return saveErr
+	})
+	return result, err
 }

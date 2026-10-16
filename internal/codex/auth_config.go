@@ -12,6 +12,24 @@ import (
 
 var authRootKeys = []string{"model_provider"}
 
+// SetModelDefaults changes only the two profile-owned root assignments.
+func SetModelDefaults(path, model, effort string) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	var assignments []byte
+	if model != "" {
+		assignments = append(assignments, []byte("model = "+strconv.Quote(model)+"\n")...)
+	}
+	if effort != "" {
+		assignments = append(assignments, []byte("model_reasoning_effort = "+strconv.Quote(effort)+"\n")...)
+	}
+	sections := splitConfig(data)
+	sections.root = replaceRootAssignments(sections.root, map[string]bool{"model": true, "model_reasoning_effort": true}, assignments)
+	return atomicWrite(path, joinParsedSections(sections), 0600)
+}
+
 // SetModelCatalog updates only the root catalog reference, preserving other settings.
 func SetModelCatalog(path, catalog string) error {
 	data, err := os.ReadFile(path)

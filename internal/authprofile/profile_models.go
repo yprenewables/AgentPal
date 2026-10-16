@@ -48,10 +48,14 @@ func writeModelFile(path string, data []byte) error {
 
 func (s *Store) saveOutgoingModels(codexDir string) error {
 	_, fileErr := os.Stat(filepath.Join(codexDir, "models.json"))
+	defaults, err := readCurrentDefaults(codexDir)
+	if err != nil {
+		return err
+	}
 	if fileErr != nil && !os.IsNotExist(fileErr) {
 		return fileErr
 	}
-	if os.IsNotExist(fileErr) {
+	if os.IsNotExist(fileErr) && defaults.Model == "" && defaults.Effort == "" {
 		// No legacy file to migrate. Update only an already identifiable profile.
 		snapshot, ok, err := readCurrentSnapshot(codexDir)
 		if err != nil {
@@ -68,16 +72,19 @@ func (s *Store) saveOutgoingModels(codexDir string) error {
 		if current.CurrentProfileID == "" {
 			return nil
 		}
-		return copyOptionalModels(filepath.Join(codexDir, "models.json"), filepath.Join(s.Root, current.CurrentProfileID, "models.json"))
+		return s.saveCurrentModelSettings(codexDir, current.CurrentProfileID)
 	}
 	_, current, err := s.reconcileCurrentLocked(codexDir, nil)
 	if err != nil {
 		return err
 	}
 	if current.CurrentProfileID == "" {
-		return errors.New("cannot associate existing models.json with the current authentication")
+		if os.IsNotExist(fileErr) {
+			return nil
+		}
+		return errors.New("cannot associate existing model settings with the current authentication")
 	}
-	return copyOptionalModels(filepath.Join(codexDir, "models.json"), filepath.Join(s.Root, current.CurrentProfileID, "models.json"))
+	return s.saveCurrentModelSettings(codexDir, current.CurrentProfileID)
 }
 
 // WithCurrentModels serializes model saves with profile switches and reconciliation.
@@ -92,14 +99,14 @@ func (s *Store) WithCurrentModels(codexDir string, save func() error) error {
 		return errors.New("current authentication profile could not be identified")
 	}
 	profileModels := filepath.Join(s.Root, current.CurrentProfileID, "models.json")
-	backups, err := backupFiles(filepath.Join(codexDir, "models.json"), filepath.Join(codexDir, "config.toml"), profileModels)
+	backups, err := backupFiles(filepath.Join(codexDir, "models.json"), filepath.Join(codexDir, "config.toml"), profileModels, filepath.Join(s.Root, current.CurrentProfileID, defaultsFile))
 	if err != nil {
 		return err
 	}
 	if err := save(); err != nil {
 		return restoreFiles(backups, err)
 	}
-	if err := copyOptionalModels(filepath.Join(codexDir, "models.json"), profileModels); err != nil {
+	if err := s.saveCurrentModelSettings(codexDir, current.CurrentProfileID); err != nil {
 		return restoreFiles(backups, err)
 	}
 	return nil
@@ -167,5 +174,8 @@ func (s *Store) applyProfileModels(codexDir, profileID string) error {
 	} else if !os.IsNotExist(err) {
 		return err
 	}
-	return codex.SetModelCatalog(filepath.Join(codexDir, "config.toml"), catalog)
+	if err := codex.SetModelCatalog(filepath.Join(codexDir, "config.toml"), catalog); err != nil {
+		return err
+	}
+	return s.applyProfileDefaults(codexDir, profileID)
 }

@@ -104,5 +104,7 @@ button.primary.compact { min-width:4rem; }
 .model-defaults select { font:inherit; width:100%; border:1px solid #cbd6e2; border-radius:7px; padding:10px; background:white; }
 @media(max-width:680px) { .model-defaults { grid-template-columns:minmax(0,1fr); }.model-row { grid-template-columns:minmax(0,1fr) auto; }.model-row .profile-actions.inline { min-width:0; gap:8px; } }
 .model-toggle { display:flex; align-items:center; gap:6px; font-size:13px; color:#172033; }
-.button-row .model-toggle { margin-right:4px; }
+.models-toolbar { align-items:center; flex-shrink:0; flex-wrap:nowrap; gap:6px; white-space:nowrap; }
+.models-toolbar button { padding:7px 11px; }
+.models-toolbar .model-toggle { gap:4px; margin:0 3px; }
 .model-row .sync-status { display:block; }

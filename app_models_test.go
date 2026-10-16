@@ -13,6 +13,32 @@ import (
 
 type staticCatalog struct{ catalog *modelcatalog.Catalog }
 
+func TestSaveDefaultModelSettingsPersistsToProfile(t *testing.T) {
+	app, _, _ := setupCurrentAuthApp(t, `{"OPENAI_API_KEY":"secret"}`, "model_provider='corp'\n[model_providers.corp]\nbase_url='https://example.com/v1'")
+	initial, err := app.GetDefaultModelSettings()
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = app.SaveDefaultModelSettings(modelmanagement.DefaultRequest{ConfigHash: initial.ConfigHash, Model: "saved-model", Effort: "high"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	profiles, err := app.ListAuthProfiles()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range profiles {
+		if p.Active {
+			data, err := os.ReadFile(filepath.Join(os.Getenv("HOME"), ".agentpal/auth-profiles", p.ID, "model-defaults.json"))
+			if err != nil || !strings.Contains(string(data), "saved-model") {
+				t.Fatalf("defaults not saved: %s, %v", data, err)
+			}
+			return
+		}
+	}
+	t.Fatal("no active profile")
+}
+
 func (s staticCatalog) Catalog(context.Context) (*modelcatalog.Catalog, error) {
 	return s.catalog, nil
 }

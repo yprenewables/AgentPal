@@ -48,7 +48,7 @@ Server 直接读取配置的 Codex 目录。每次清单请求都会重新扫描
 
 切换档案会更新 `auth.json` 和 `model_provider`，并用档案中的 Provider 配置完整覆盖本机同名 Provider；其他 Provider、MCP、Projects 和本机设置保持不变。
 
-`models.json` 按 Auth Profile ID 独立保存于档案目录。Models 页面保存后会同步保存到当前档案；切换档案前保存当前模型文件，切换后自动恢复目标档案的模型文件及 `model_catalog_json` 引用。首次切换会将已有模型文件归入当前档案。尚未设置模型的档案使用 Codex 默认模型目录，不沿用其他档案的模型列表；默认模型和推理强度仍使用现有全局配置。切换失败会恢复原认证、配置和模型文件。
+`models.json` 按 Auth Profile ID 独立保存于档案目录，默认模型与推理强度保存于同目录的 `model-defaults.json`。Models 页面保存后会同步保存到当前档案；切换档案前保存当前模型设置，切换后自动恢复目标档案的模型文件、`model_catalog_json` 引用、默认模型和推理强度。首次切换会将已有模型设置归入当前档案。尚未设置模型的档案使用 Codex 默认值，不沿用其他档案的模型列表、默认模型或推理强度。切换失败会恢复原认证、配置和模型文件。
 
 ## 中心节点与预留 profile
 

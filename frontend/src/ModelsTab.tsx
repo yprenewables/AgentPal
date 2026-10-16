@@ -125,12 +125,12 @@ export default function ModelsTab({ onDirtyChange, onBusyChange }: { onDirtyChan
   }
   return <section className="workspace">
     <div className="section-heading"><div><h1>Models</h1><p>{state?.available ? [state.provider || 'Current Provider', state.baseUrl].filter(Boolean).join(' · ') : 'Manage models for the current API Key profile.'}</p></div>
-      <div className="button-row"><label className="model-toggle" title="Refresh reasoning levels, input modalities and context window from the model catalog on save"><input type="checkbox" checked={updateParams} disabled={busy} onChange={(event) => setUpdateParams(event.target.checked)} /><span>Update params</span></label><button className="secondary" disabled={busy || !editable} onClick={toggleJson}>{jsonOpen ? 'Hide JSON' : 'Edit JSON'}</button><button className="secondary" disabled={busy || !editable || !!state?.discoveryError} title={state?.discoveryError} onClick={() => void discover()}>Auto update</button><button className="primary" disabled={busy || !editable || (!modelsDirty && !jsonDirty && !updateParams)} onClick={() => void save()}>Save models</button></div>
+      <div className="button-row models-toolbar"><button className="secondary" aria-pressed={jsonOpen} title="Toggle raw JSON editor" disabled={busy || !editable} onClick={toggleJson}>Raw</button><button className="secondary" disabled={busy || !editable || !!state?.discoveryError} title={state?.discoveryError || 'Pull models from the current Provider'} onClick={() => void discover()}>Pull</button><label className="model-toggle" title="Refresh reasoning levels, input modalities and context window from the model catalog on save"><input type="checkbox" checked={updateParams} disabled={busy} onChange={(event) => setUpdateParams(event.target.checked)} /><span>params</span></label><button className="primary" disabled={busy || !editable || (!modelsDirty && !jsonDirty && !updateParams)} onClick={() => void save()}>Save</button></div>
     </div>
     {busy && <div role="status" className="empty-inline">Loading models…</div>}
     {message && <div role={message.error ? 'alert' : 'status'} className={`notice ${message.error ? 'error' : 'success'}`}>{message.text}</div>}
     {state?.error && <div role="alert" className={`notice ${state.available ? 'error' : 'warning'}`}>{state.error}</div>}
-    {state?.available && state.discoveryError && <div className="notice warning">Auto update unavailable: {state.discoveryError}</div>}
+    {state?.available && state.discoveryError && <div className="notice warning">Pull unavailable: {state.discoveryError}</div>}
     {state?.available && defaults?.error && <div role="alert" className="notice error">Default model settings unavailable: {defaults.error}</div>}
     {defaults?.available && <section className="model-defaults" aria-label="Default model settings">
       <label className="field"><span>Default model</span><input list="default-model-options" value={defaultModel} disabled={busy} placeholder="Codex default" onChange={(event) => setDefaultModel(event.target.value)} /><datalist id="default-model-options">{Array.from(new Set(draft.flatMap((entry) => { const model = JSON.parse(entry.raw); return typeof model?.slug === 'string' ? [model.slug] : []; }))).map((slug) => <option key={slug} value={slug} />)}</datalist></label>
@@ -141,7 +141,7 @@ export default function ModelsTab({ onDirtyChange, onBusyChange }: { onDirtyChan
     {state?.available && state.fileValid && <div className="profile-list">
       {jsonOpen && <label className="field"><span>models.json (models array)</span><textarea className="code-editor" spellCheck={false} rows={16} aria-label="models.json editor" value={jsonText} onChange={(event) => setJsonText(event.target.value)} /></label>}
       {draft.length > 0 && <div className="models-select-all"><span>Select all models</span><label className="model-visibility"><input type="checkbox" role="switch" aria-label="Select all models" checked={allVisible} disabled={busy || !editable || !selectable.length} onChange={(event) => toggleAll(event.target.checked)} /><span aria-hidden="true" /></label></div>}
-      {!draft.length && <div className="empty-inline">{state.fileExists ? 'No models configured.' : 'No models.json file yet.'} Use Auto update to discover models.</div>}
+      {!draft.length && <div className="empty-inline">{state.fileExists ? 'No models configured.' : 'No models.json file yet.'} Use Pull to discover models.</div>}
       {draft.map((entry, index) => {
         const parsed = JSON.parse(entry.raw);
         const model: ModelEntry | null = parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null;
