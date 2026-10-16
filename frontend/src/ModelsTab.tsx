@@ -16,6 +16,17 @@ export function mergeModels(models: ModelEntry[], ids: string[]) {
   return { models: [...retained, ...additions], added: additions.length, removed: models.length - retained.length };
 }
 
+export function parseModelDraft(text: string): { models: ModelEntry[] } | { error: string } {
+  let parsed: unknown;
+  try { parsed = JSON.parse(text); } catch (error) { return { error: `Invalid JSON: ${String(error)}` }; }
+  const list = Array.isArray(parsed) ? parsed : (parsed && typeof parsed === 'object' && Array.isArray((parsed as { models?: unknown }).models) ? (parsed as { models: unknown[] }).models : null);
+  if (!list) return { error: 'Expected a JSON array of models, or an object with a "models" array.' };
+  for (const item of list) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return { error: 'Every model entry must be a JSON object.' };
+  }
+  return { models: list as ModelEntry[] };
+}
+
 export function summarizeEnrichment(state: ModelManagementState) {
   if (state.enrichmentError) return `Models saved, but model parameters were not updated: ${state.enrichmentError}`;
   const unmatched = state.unmatchedModels || [];
@@ -33,9 +44,13 @@ export default function ModelsTab({ onDirtyChange, onBusyChange }: { onDirtyChan
   const [defaultModel, setDefaultModel] = useState('');
   const [effort, setEffort] = useState('');
   const [updateParams, setUpdateParams] = useState(true);
+  const [jsonOpen, setJsonOpen] = useState(false);
+  const [jsonText, setJsonText] = useState('');
+  const baselineJson = JSON.stringify(draft.map((entry) => JSON.parse(entry.raw)), null, 2);
   const modelsDirty = !!state && JSON.stringify(draft) !== JSON.stringify(state.rawModels.map((raw) => ({ raw })));
+  const jsonDirty = jsonOpen && jsonText !== baselineJson;
   const defaultsDirty = !!defaults && (defaultModel !== defaults.model || effort !== defaults.effort);
-  const dirty = modelsDirty || defaultsDirty;
+  const dirty = modelsDirty || defaultsDirty || jsonDirty;
   useEffect(() => { onDirtyChange(dirty); }, [dirty, onDirtyChange]);
   useEffect(() => { onBusyChange(busy); }, [busy, onBusyChange]);
   useEffect(() => { void load(); }, []);
@@ -66,15 +81,25 @@ export default function ModelsTab({ onDirtyChange, onBusyChange }: { onDirtyChan
   }
   async function save() {
     if (!api || !state) return;
+    if (jsonOpen) {
+      const parsed = parseModelDraft(jsonText);
+      if ('error' in parsed) { setMessage({ error: true, text: parsed.error }); return; }
+    }
+    const entries = jsonOpen ? (parseModelDraft(jsonText) as { models: ModelEntry[] }).models : draft.map((entry) => JSON.parse(entry.raw) as ModelEntry);
     setBusy(true); setMessage(null);
     try {
-      const next = await api.SaveModels({ fileHash: state.fileHash, rawModels: draft.map((entry) => entry.raw), visibilityOverrides: Object.fromEntries(draft.flatMap((entry, index) => entry.visibility ? [[index, entry.visibility]] : [])), updateParams });
+      const next = await api.SaveModels({ fileHash: state.fileHash, rawModels: entries.map((model) => JSON.stringify(model)), visibilityOverrides: jsonOpen ? {} : Object.fromEntries(draft.flatMap((entry, index) => entry.visibility ? [[index, entry.visibility]] : [])), updateParams });
       if (!next.available || !next.fileValid || next.error) throw new Error(next.error || 'Could not reload saved models.');
       setState(next); setDraft(next.rawModels.map((raw) => ({ raw })));
+      if (jsonOpen) setJsonText(JSON.stringify(next.rawModels.map((raw) => JSON.parse(raw)), null, 2));
       setDefaults(await api.GetDefaultModelSettings());
       setMessage({ error: false, text: updateParams ? summarizeEnrichment(next) : 'Models saved and catalog configured. Restart ChatGPT / Codex to reload the model list.' });
     } catch (error) { setMessage({ error: true, text: String(error) }); }
     finally { setBusy(false); }
+  }
+  function toggleJson() {
+    if (!jsonOpen) { setJsonText(baselineJson); setJsonOpen(true); return; }
+    setJsonOpen(false); setJsonText('');
   }
   async function saveDefaults() {
     if (!api || !defaults) return;
@@ -100,7 +125,7 @@ export default function ModelsTab({ onDirtyChange, onBusyChange }: { onDirtyChan
   }
   return <section className="workspace">
     <div className="section-heading"><div><h1>Models</h1><p>{state?.available ? [state.provider || 'Current Provider', state.baseUrl].filter(Boolean).join(' · ') : 'Manage models for the current API Key profile.'}</p></div>
-      <div className="button-row"><label className="model-toggle" title="Refresh reasoning levels, input modalities and context window from the model catalog on save"><input type="checkbox" checked={updateParams} disabled={busy} onChange={(event) => setUpdateParams(event.target.checked)} /><span>Update params</span></label><button className="secondary" disabled={busy || !editable || !!state?.discoveryError} title={state?.discoveryError} onClick={() => void discover()}>Auto update</button><button className="primary" disabled={busy || !editable || (!modelsDirty && !updateParams)} onClick={() => void save()}>Save models</button></div>
+      <div className="button-row"><label className="model-toggle" title="Refresh reasoning levels, input modalities and context window from the model catalog on save"><input type="checkbox" checked={updateParams} disabled={busy} onChange={(event) => setUpdateParams(event.target.checked)} /><span>Update params</span></label><button className="secondary" disabled={busy || !editable} onClick={toggleJson}>{jsonOpen ? 'Hide JSON' : 'Edit JSON'}</button><button className="secondary" disabled={busy || !editable || !!state?.discoveryError} title={state?.discoveryError} onClick={() => void discover()}>Auto update</button><button className="primary" disabled={busy || !editable || (!modelsDirty && !jsonDirty && !updateParams)} onClick={() => void save()}>Save models</button></div>
     </div>
     {busy && <div role="status" className="empty-inline">Loading models…</div>}
     {message && <div role={message.error ? 'alert' : 'status'} className={`notice ${message.error ? 'error' : 'success'}`}>{message.text}</div>}
@@ -114,6 +139,7 @@ export default function ModelsTab({ onDirtyChange, onBusyChange }: { onDirtyChan
     </section>}
     {!busy && <div className="models-status"><span>{dirty ? 'Unsaved changes' : state?.available && state.fileValid ? 'All changes saved' : ''}</span><button className="text-button" onClick={() => { if (!dirty || window.confirm('Discard unsaved model changes and reload?')) void load(); }}>Reload models</button></div>}
     {state?.available && state.fileValid && <div className="profile-list">
+      {jsonOpen && <label className="field"><span>models.json (models array)</span><textarea className="code-editor" spellCheck={false} rows={16} aria-label="models.json editor" value={jsonText} onChange={(event) => setJsonText(event.target.value)} /></label>}
       {draft.length > 0 && <div className="models-select-all"><span>Select all models</span><label className="model-visibility"><input type="checkbox" role="switch" aria-label="Select all models" checked={allVisible} disabled={busy || !editable || !selectable.length} onChange={(event) => toggleAll(event.target.checked)} /><span aria-hidden="true" /></label></div>}
       {!draft.length && <div className="empty-inline">{state.fileExists ? 'No models configured.' : 'No models.json file yet.'} Use Auto update to discover models.</div>}
       {draft.map((entry, index) => {

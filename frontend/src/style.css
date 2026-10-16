@@ -105,3 +105,4 @@ button.primary.compact { min-width:4rem; }
 @media(max-width:680px) { .model-defaults { grid-template-columns:minmax(0,1fr); }.model-row { grid-template-columns:minmax(0,1fr) auto; }.model-row .profile-actions.inline { min-width:0; gap:8px; } }
 .model-toggle { display:flex; align-items:center; gap:6px; font-size:13px; color:#172033; }
 .button-row .model-toggle { margin-right:4px; }
+.model-row .sync-status { display:block; }
