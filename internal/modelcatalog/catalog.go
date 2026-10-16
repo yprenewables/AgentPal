@@ -155,9 +155,12 @@ func filterModalities(in []string) []string {
 
 func filterEfforts(in []string) []string {
 	out := []string{}
-	for _, e := range in {
-		if isCodexEffort(strings.ToLower(e)) {
-			out = append(out, strings.ToLower(e))
+	for _, effort := range codexEfforts {
+		for _, value := range in {
+			if strings.EqualFold(value, effort) {
+				out = append(out, effort)
+				break
+			}
 		}
 	}
 	return out

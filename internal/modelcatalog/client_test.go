@@ -36,6 +36,15 @@ func TestClientBuildsInfoWithOverridesAndFiltering(t *testing.T) {
 	if !ok || info.ContextWindow != ContextWindowOverride || len(info.InputModalities) != 2 || info.InputModalities[0] != "text" || info.InputModalities[1] != "image" || info.DefaultEffort != "medium" {
 		t.Fatalf("openai info=%+v ok=%v", info, ok)
 	}
+	want := []string{"none", "low", "medium", "high", "xhigh", "max"}
+	if len(info.ReasoningEfforts) != len(want) {
+		t.Fatalf("efforts=%v", info.ReasoningEfforts)
+	}
+	for i, effort := range want {
+		if info.ReasoningEfforts[i] != effort {
+			t.Fatalf("efforts=%v", info.ReasoningEfforts)
+		}
+	}
 	glm, ok := cat.Lookup("glm-5.3")
 	if !ok || glm.ContextWindow != 1048576 || glm.DefaultEffort != "" {
 		t.Fatalf("glm info=%+v ok=%v", glm, ok)

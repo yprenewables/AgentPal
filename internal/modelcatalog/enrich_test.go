@@ -67,3 +67,19 @@ func TestApplyClearsDefaultEffortWhenUnknown(t *testing.T) {
 		t.Fatalf("levels=%v", levels)
 	}
 }
+
+func TestApplyOrdersReasoningEffortsLightToHeavy(t *testing.T) {
+	model := map[string]json.RawMessage{}
+	Apply(model, Info{ReasoningEfforts: []string{"max", "xhigh", "high", "medium", "low", "minimal", "none", "HIGH"}})
+	var levels []reasoningLevel
+	decode(t, model, "supported_reasoning_levels", &levels)
+	want := []string{"none", "minimal", "low", "medium", "high", "xhigh", "max"}
+	if len(levels) != len(want) {
+		t.Fatalf("levels=%v", levels)
+	}
+	for i, effort := range want {
+		if levels[i].Effort != effort {
+			t.Fatalf("level %d = %s, want %s", i, levels[i].Effort, effort)
+		}
+	}
+}

@@ -30,7 +30,7 @@ func Apply(model map[string]json.RawMessage, info Info) {
 	model["context_window"] = encode(info.ContextWindow)
 	model["max_context_window"] = encode(info.ContextWindow)
 	levels := make([]reasoningLevel, 0, len(info.ReasoningEfforts))
-	for _, effort := range info.ReasoningEfforts {
+	for _, effort := range filterEfforts(info.ReasoningEfforts) {
 		levels = append(levels, reasoningLevel{Effort: effort, Description: effortDescriptions[effort]})
 	}
 	model["supported_reasoning_levels"] = encode(levels)
