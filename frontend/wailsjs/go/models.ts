@@ -41,6 +41,7 @@ export namespace modelmanagement {
 	    models: number[][];
 	    rawModels?: string[];
 	    visibilityOverrides?: Record<number, string>;
+	    updateParams?: boolean;
 
 	    static createFrom(source: any = {}) {
 	        return new SaveRequest(source);
@@ -52,6 +53,7 @@ export namespace modelmanagement {
 	        this.models = source["models"];
 	        this.rawModels = source["rawModels"];
 	        this.visibilityOverrides = source["visibilityOverrides"];
+	        this.updateParams = source["updateParams"];
 	    }
 	}
 	export class State {
@@ -60,6 +62,8 @@ export namespace modelmanagement {
 	    provider: string;
 	    baseUrl: string;
 	    discoveryError?: string;
+	    enrichmentError?: string;
+	    unmatchedModels: string[];
 	    fileValid: boolean;
 	    writable: boolean;
 	    fileExists: boolean;
@@ -78,6 +82,8 @@ export namespace modelmanagement {
 	        this.provider = source["provider"];
 	        this.baseUrl = source["baseUrl"];
 	        this.discoveryError = source["discoveryError"];
+	        this.enrichmentError = source["enrichmentError"];
+	        this.unmatchedModels = source["unmatchedModels"];
 	        this.fileValid = source["fileValid"];
 	        this.writable = source["writable"];
 	        this.fileExists = source["fileExists"];
