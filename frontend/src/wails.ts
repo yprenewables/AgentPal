@@ -19,7 +19,7 @@ export type RawProfileContent = { authJson: string; configToml: string };
 export type RawProfileRequest = { name: string; authJson: string; configToml: string };
 export type ModelEntry = { slug?: unknown; display_name?: unknown; visibility?: unknown; [key: string]: unknown };
 export type DefaultModelSettings = { available: boolean; error?: string; configHash: string; model: string; effort: string };
-export type ModelManagementState = { available: boolean; error?: string; provider: string; baseUrl: string; discoveryError?: string; fileValid: boolean; writable: boolean; fileExists: boolean; fileHash: string; models: ModelEntry[]; rawModels: string[] };
+export type ModelManagementState = { available: boolean; error?: string; provider: string; baseUrl: string; discoveryError?: string; enrichmentError?: string; unmatchedModels: string[]; fileValid: boolean; writable: boolean; fileExists: boolean; fileHash: string; models: ModelEntry[]; rawModels: string[] };
 
 type Backend = { App: {
   GetBootstrap(): Promise<Bootstrap>;
@@ -27,7 +27,7 @@ type Backend = { App: {
   GetDefaultModelSettings(): Promise<DefaultModelSettings>;
   SaveDefaultModelSettings(request: { configHash: string; model: string; effort: string }): Promise<DefaultModelSettings>;
   DiscoverModels(): Promise<string[]>;
-  SaveModels(request: { fileHash: string; rawModels: string[]; visibilityOverrides: Record<number, string> }): Promise<ModelManagementState>;
+  SaveModels(request: { fileHash: string; rawModels: string[]; visibilityOverrides: Record<number, string>; updateParams: boolean }): Promise<ModelManagementState>;
   SaveSettings(request: SettingsRequest): Promise<Bootstrap>;
   RefreshConfiguration(): Promise<ConfigRefresh>;
   ApplyConfiguration(request: { changes: ApplyChange[] }): Promise<ApplyResult>;

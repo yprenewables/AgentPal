@@ -1,13 +1,47 @@
 package main
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"agentpal/internal/modelcatalog"
 	"agentpal/internal/modelmanagement"
 )
+
+type staticCatalog struct{ catalog *modelcatalog.Catalog }
+
+func (s staticCatalog) Catalog(context.Context) (*modelcatalog.Catalog, error) {
+	return s.catalog, nil
+}
+
+func TestSaveModelsPassesUpdateParamsThroughApp(t *testing.T) {
+	entry, ok := modelcatalog.BuildInfo("openai/gpt-6-sol", "", 1050000, []string{"text"}, []string{"high"}, "high")
+	if !ok {
+		t.Fatal("fixture entry rejected")
+	}
+	original := modelmanagement.NewCatalogSource
+	modelmanagement.NewCatalogSource = func() modelmanagement.CatalogSource {
+		return staticCatalog{catalog: modelcatalog.NewCatalog([]modelcatalog.Entry{entry})}
+	}
+	defer func() { modelmanagement.NewCatalogSource = original }()
+
+	app, state, _ := setupCurrentAuthApp(t, `{"OPENAI_API_KEY":"secret"}`, "model_provider='corp'\n[model_providers.corp]\nbase_url='https://example.com/v1'")
+	initial, err := app.GetModelManagementState()
+	if err != nil {
+		t.Fatal(err)
+	}
+	saved, err := app.SaveModels(modelmanagement.SaveRequest{FileHash: initial.FileHash, RawModels: []string{`{"slug":"gpt-6-sol"}`}, UpdateParams: true})
+	if err != nil || len(saved.UnmatchedModels) != 0 {
+		t.Fatalf("saved=%+v err=%v", saved, err)
+	}
+	data, err := os.ReadFile(filepath.Join(state.CodexDir, "models.json"))
+	if err != nil || !strings.Contains(string(data), "272000") {
+		t.Fatalf("data=%s err=%v", data, err)
+	}
+}
 
 func TestModelManagementUsesSettingsDirectoryAndRechecksAuth(t *testing.T) {
 	app, state, _ := setupCurrentAuthApp(t, `{"OPENAI_API_KEY":"secret"}`, "model_provider='corp'\n[model_providers.corp]\nbase_url='https://example.com/v1'")
