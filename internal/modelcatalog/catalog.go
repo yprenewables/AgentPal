@@ -119,3 +119,77 @@ func (c *Catalog) Lookup(slug string) (Info, bool) {
 	}
 	return winner.Info, true
 }
+
+// ContextWindowOverride 是 openai / anthropic 模型统一使用的上下文长度。
+const ContextWindowOverride int64 = 272000
+
+var codexEfforts = []string{"none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra", "persistent"}
+
+// CodexEfforts 返回 Codex 支持的推理档位白名单副本。
+func CodexEfforts() []string { return append([]string{}, codexEfforts...) }
+
+func isCodexEffort(value string) bool {
+	for _, e := range codexEfforts {
+		if e == value {
+			return true
+		}
+	}
+	return false
+}
+
+func filterModalities(in []string) []string {
+	out := []string{}
+	for _, m := range []string{"text", "image", "audio"} {
+		for _, v := range in {
+			if strings.EqualFold(v, m) {
+				out = append(out, m)
+				break
+			}
+		}
+	}
+	if len(out) == 0 {
+		return []string{"text"}
+	}
+	return out
+}
+
+func filterEfforts(in []string) []string {
+	out := []string{}
+	for _, e := range in {
+		if isCodexEffort(strings.ToLower(e)) {
+			out = append(out, strings.ToLower(e))
+		}
+	}
+	return out
+}
+
+func overridesContext(provider string) bool {
+	return provider == "openai" || provider == "anthropic"
+}
+
+// BuildInfo 把接口原始字段映射为 Codex 需要的参数，并应用上下文长度覆盖规则。
+func BuildInfo(id, canonical string, contextLength int64, modalities, efforts []string, defaultEffort string) (Entry, bool) {
+	if strings.TrimSpace(id) == "" {
+		return Entry{}, false
+	}
+	provider := strings.ToLower(strings.SplitN(id, "/", 2)[0])
+	slug := lastSegment(id)
+	if canonical != "" {
+		slug = lastSegment(canonical)
+	}
+	window := contextLength
+	if overridesContext(provider) {
+		window = ContextWindowOverride
+	}
+	info := Info{
+		Slug:             slug,
+		Provider:         provider,
+		ContextWindow:    window,
+		InputModalities:  filterModalities(modalities),
+		ReasoningEfforts: filterEfforts(efforts),
+	}
+	if isCodexEffort(strings.ToLower(defaultEffort)) {
+		info.DefaultEffort = strings.ToLower(defaultEffort)
+	}
+	return Entry{ID: id, Canonical: canonical, Provider: provider, Info: info}, true
+}
