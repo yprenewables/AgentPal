@@ -2,7 +2,7 @@ package constants
 
 const (
 	AppName     = "AgentPal"
-	AppVersion  = "0.2.0"
+	AppVersion  = "0.11-beta"
 	RepoOwner   = "yprenewables"
 	RepoName    = "AgentPal"
 	DefaultPort = 28888
