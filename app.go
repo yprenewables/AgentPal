@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strconv"
+	"sync"
 	"time"
 
 	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
@@ -24,7 +25,9 @@ import (
 )
 
 type App struct {
-	ctx context.Context
+	ctx           context.Context
+	chatGPTMu     sync.Mutex
+	chatGPTCancel context.CancelFunc
 }
 
 func NewApp() *App {

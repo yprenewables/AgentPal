@@ -13,6 +13,8 @@ export function ApplyConfiguration(arg1:types.ApplyRequest):Promise<types.ApplyR
 
 export function BrowseFolder():Promise<string>;
 
+export function CancelChatGPTLogin():Promise<void>;
+
 export function CheckForUpdate():Promise<types.UpdateInfo>;
 
 export function CreateAPIKeyProfile(arg1:types.APIKeyProfileRequest):Promise<types.AuthProfile>;
@@ -44,6 +46,8 @@ export function ImportCurrentAPIKey(arg1:string):Promise<types.AuthProfile>;
 export function ImportCurrentAuth(arg1:string):Promise<types.AuthProfile>;
 
 export function ListAuthProfiles():Promise<Array<types.AuthProfile>>;
+
+export function LoginChatGPT():Promise<types.AuthProfile>;
 
 export function LogoutCentralLogin():Promise<void>;
 

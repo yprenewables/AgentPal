@@ -77,6 +77,9 @@ function AuthenticationTabCompact({ profiles, reload, setNotice }: { profiles: A
   const [login, setLogin] = useState<{ loggedIn: boolean; subject?: string; name?: string; displayName?: string; email?: string }>({ loggedIn: false });
   const [syncItems, setSyncItems] = useState<AuthSyncItem[]>([]);
   const [loginBusy, setLoginBusy] = useState(false);
+  const [chatGPTBusy, setChatGPTBusy] = useState(false);
+  const [chatGPTCancelling, setChatGPTCancelling] = useState(false);
+  useEffect(() => () => { void api?.CancelChatGPTLogin(); }, []);
   const [syncing, setSyncing] = useState(false);
   const [updating, setUpdating] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState<string | null>(null);
@@ -141,6 +144,28 @@ function AuthenticationTabCompact({ profiles, reload, setNotice }: { profiles: A
     } finally {
       setLoginBusy(false);
     }
+  }
+
+  async function loginChatGPT() {
+    if (!api || chatGPTBusy) return;
+    setChatGPTBusy(true);
+    try {
+      await api.LoginChatGPT();
+      await reload();
+      setNotice({ kind: 'success', text: 'ChatGPT profile activated. Restart ChatGPT / Codex to use the new login.' });
+    } catch (error) {
+      setNotice({ kind: 'warning', text: String(error) });
+    } finally {
+      setChatGPTBusy(false);
+      setChatGPTCancelling(false);
+    }
+  }
+
+  async function cancelChatGPTLogin() {
+    if (!api || chatGPTCancelling) return;
+    setChatGPTCancelling(true);
+    try { await api.CancelChatGPTLogin(); }
+    catch (error) { setChatGPTCancelling(false); setNotice({ kind: 'error', text: String(error) }); }
   }
 
   async function logout() {
@@ -244,6 +269,7 @@ function AuthenticationTabCompact({ profiles, reload, setNotice }: { profiles: A
     <div className="section-heading">
       <div><h1>Authentication</h1><p>Choose one local API Key or ChatGPT profile.</p></div>
       <div className="profile-group-actions authentication-actions">
+        {profiles.some((profile) => profile.active && profile.type === 'api_key') && <button className="secondary compact" disabled={chatGPTBusy} onClick={() => void loginChatGPT()}>Log in with ChatGPT</button>}
         {displayName && <span className="central-account">Central account · {displayName}</span>}
         {login.loggedIn && <><IconButton label={syncing ? 'Refreshing Central profiles' : 'Refresh Central profiles'} disabled={syncing} onClick={() => void syncCentralProfiles()}><RefreshIcon spinning={syncing} /></IconButton><IconButton label="Log out" onClick={() => void logout()}><LogoutIcon /></IconButton></>}
         {!login.loggedIn && <button className="secondary compact" onClick={() => void startLogin()} disabled={loginBusy}>{loginBusy ? 'Waiting...' : 'Log in to Central'}</button>}
@@ -279,6 +305,7 @@ function AuthenticationTabCompact({ profiles, reload, setNotice }: { profiles: A
         })}
       </div>
     </section>
+    {chatGPTBusy && <div className="dialog-backdrop"><div className="dialog" role="dialog" aria-modal="true" aria-labelledby="chatgpt-login-title"><h2 id="chatgpt-login-title">Log in with ChatGPT</h2><p>Complete the ChatGPT login in your browser. Your API Key profile will be kept so you can switch back.</p><p role="status">{chatGPTCancelling ? 'Cancelling login…' : 'Waiting for browser authorization…'}</p><div className="button-row dialog-actions"><button className="secondary" disabled={chatGPTCancelling} onClick={() => void cancelChatGPTLogin()}>Cancel login</button></div></div></div>}
     {editDialog.open && <div className="dialog-backdrop"><div className="dialog wide" role="dialog" aria-modal="true" aria-labelledby="profile-editor-title">
       <div className="section-heading"><h2 id="profile-editor-title">{editDialog.profile ? 'Edit local profile' : 'New local profile'}</h2><IconButton label="Close" onClick={() => setEditDialog({ open: false, name: '', authJson: '', configToml: '' })}><CloseIcon /></IconButton></div>
       <label className="field"><span>Name</span><input value={editDialog.name} onChange={(event) => setEditDialog({ ...editDialog, name: event.target.value })} /></label>

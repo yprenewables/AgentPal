@@ -27,6 +27,7 @@ Server 直接读取配置的 Codex 目录。每次清单请求都会重新扫描
 默认进入 `Authentication` 标签并连接中心节点：
 
 - `Authentication`：导入当前 Codex 登录、创建 API Key 档案、查看和切换本地档案。
+- 当前使用 API Key 时，可点击 `Log in with ChatGPT`，在浏览器完成 ChatGPT 授权后自动保存并切换本地档案；原 API Key 档案保留，可随时切回。需要安装 Codex CLI；登录支持取消，五分钟超时，授权失败不会更改当前认证。切换后重启 ChatGPT / Codex。
 - `Models`：从当前 Provider 的 `/models` 同步模型清单，移除已下线模型，调整可见性及默认模型、推理强度。Auto update 更新草稿，Save models 后写入文件。
 - `Configuration`：比较 Skills 和 `[mcp_servers.*]`，预览新增、修改、本地独有和一致项，确认后应用。
 
@@ -46,6 +47,8 @@ Server 直接读取配置的 Codex 目录。每次清单请求都会重新扫描
 ```
 
 切换档案会更新 `auth.json` 和 `model_provider`，并用档案中的 Provider 配置完整覆盖本机同名 Provider；其他 Provider、MCP、Projects 和本机设置保持不变。
+
+`models.json` 按 Auth Profile ID 独立保存于档案目录。Models 页面保存后会同步保存到当前档案；切换档案前保存当前模型文件，切换后自动恢复目标档案的模型文件及 `model_catalog_json` 引用。首次切换会将已有模型文件归入当前档案。尚未设置模型的档案使用 Codex 默认模型目录，不沿用其他档案的模型列表；默认模型和推理强度仍使用现有全局配置。切换失败会恢复原认证、配置和模型文件。
 
 ## 中心节点与预留 profile
 

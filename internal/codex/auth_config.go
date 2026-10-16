@@ -12,6 +12,21 @@ import (
 
 var authRootKeys = []string{"model_provider"}
 
+// SetModelCatalog updates only the root catalog reference, preserving other settings.
+func SetModelCatalog(path, catalog string) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	var assignment []byte
+	if catalog != "" {
+		assignment = []byte("model_catalog_json = " + strconv.Quote(catalog) + "\n")
+	}
+	sections := splitConfig(data)
+	sections.root = replaceRootAssignments(sections.root, map[string]bool{"model_catalog_json": true}, assignment)
+	return atomicWrite(path, joinParsedSections(sections), 0600)
+}
+
 type AuthSummary struct {
 	Provider string `json:"provider"`
 }
@@ -31,7 +46,7 @@ func ExtractAuthConfigFromBytes(data []byte) ([]byte, AuthSummary, error) {
 	}
 	summary := AuthSummary{Provider: stringValue(root["model_provider"])}
 	if summary.Provider == "" {
-		return nil, summary, errors.New("model_provider is required")
+		summary.Provider = "openai"
 	}
 	sections := splitConfig(data)
 	rootPart := filterRootAssignments(sections.root, stringSet(authRootKeys))
@@ -43,6 +58,9 @@ func ExtractAuthConfigFromBytes(data []byte) ([]byte, AuthSummary, error) {
 		}
 	}
 	if len(provider) == 0 {
+		if summary.Provider == "openai" {
+			return []byte("model_provider = \"openai\"\n"), summary, nil
+		}
 		return nil, summary, errors.New("model provider table was not found: " + summary.Provider)
 	}
 	return joinSections([][]byte{rootPart, ensureProviderName(provider, summary.Provider)}), summary, nil
@@ -179,7 +197,10 @@ func CompareProviderConfig(path string, fragment []byte) (bool, string, string, 
 	profileSections := splitConfig(fragment)
 	profileProvider := providerSections(profileSections, "model_providers."+provider)
 	if len(profileProvider) == 0 {
-		return false, "profile Provider table is missing", "", "", errors.New("model provider table was not found: " + provider)
+		if provider != "openai" {
+			return false, "profile Provider table is missing", "", "", errors.New("model provider table was not found: " + provider)
+		}
+		return false, "", "", "", nil
 	}
 	target, err := os.ReadFile(path)
 	if os.IsNotExist(err) {

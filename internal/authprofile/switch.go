@@ -21,6 +21,12 @@ func (s *Store) Preview(codexDir, profileID string) (types.ProfileSwitchPreview,
 }
 
 func (s *Store) Activate(codexDir, profileID string, allowProviderConflict ...bool) (types.ProfileSwitchResult, error) {
+	reconcileMu.Lock()
+	defer reconcileMu.Unlock()
+	return s.activateLocked(codexDir, profileID, allowProviderConflict...)
+}
+
+func (s *Store) activateLocked(codexDir, profileID string, allowProviderConflict ...bool) (result types.ProfileSwitchResult, err error) {
 	p, auth, fragment, err := s.loadProfileForActivation(profileID)
 	if err != nil {
 		return types.ProfileSwitchResult{}, err
@@ -32,6 +38,18 @@ func (s *Store) Activate(codexDir, profileID string, allowProviderConflict ...bo
 	if conflict && (len(allowProviderConflict) == 0 || !allowProviderConflict[0]) {
 		return types.ProfileSwitchResult{Profile: types.AuthProfile{ID: p.ID, Name: p.Name, Type: p.Type, Provider: p.Provider, Source: p.Source}, ProviderConflict: true, ConflictDescription: description, ProfileProvider: profileProvider, LocalProvider: localProvider}, nil
 	}
+	if err := s.saveOutgoingModels(codexDir); err != nil {
+		return types.ProfileSwitchResult{}, err
+	}
+	backups, err := backupFiles(filepath.Join(codexDir, "auth.json"), filepath.Join(codexDir, "config.toml"), filepath.Join(codexDir, "models.json"), filepath.Join(s.Root, "active.json"))
+	if err != nil {
+		return types.ProfileSwitchResult{}, err
+	}
+	defer func() {
+		if err != nil {
+			err = restoreFiles(backups, err)
+		}
+	}()
 	if err := os.WriteFile(filepath.Join(codexDir, "auth.json.agentpal.tmp"), auth, 0o600); err != nil {
 		return types.ProfileSwitchResult{}, err
 	}
@@ -42,6 +60,9 @@ func (s *Store) Activate(codexDir, profileID string, allowProviderConflict ...bo
 		return types.ProfileSwitchResult{}, err
 	}
 	if err := codex.EnsureProviderBearerToken(filepath.Join(codexDir, "config.toml"), auth); err != nil {
+		return types.ProfileSwitchResult{}, err
+	}
+	if err := s.applyProfileModels(codexDir, p.ID); err != nil {
 		return types.ProfileSwitchResult{}, err
 	}
 	if err := os.WriteFile(filepath.Join(s.Root, "active.json"), []byte(p.ID), 0o600); err != nil {

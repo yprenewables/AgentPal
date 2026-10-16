@@ -29,6 +29,9 @@ func (s *Store) replaceProfile(profile AuthProfile, auth, config []byte) error {
 	if err := writeProfile(staging, profile, auth, config); err != nil {
 		return err
 	}
+	if err := copyOptionalModels(filepath.Join(dir, "models.json"), filepath.Join(staging, "models.json")); err != nil {
+		return err
+	}
 	if _, err := readSavedProfile(staging); err != nil {
 		return err
 	}
@@ -160,6 +163,18 @@ func (s *Store) reconcileCentralName(central AuthProfile) ([]AuthProfile, error)
 			return nil, readErr
 		}
 		wasActive := strings.TrimSpace(string(active)) == local.ID
+		// When duplicate credentials are consolidated, carry local model settings
+		// to the surviving ID if it has none (or the local profile is active).
+		_, modelsErr := os.Stat(filepath.Join(s.Root, central.ID, "models.json"))
+		if wasActive || os.IsNotExist(modelsErr) {
+			if _, err := os.Stat(filepath.Join(s.Root, local.ID, "models.json")); err == nil {
+				if err := copyOptionalModels(filepath.Join(s.Root, local.ID, "models.json"), filepath.Join(s.Root, central.ID, "models.json")); err != nil {
+					return nil, err
+				}
+			} else if !os.IsNotExist(err) {
+				return nil, err
+			}
+		}
 		if wasActive {
 			if err := s.writeActiveProfileID(central.ID); err != nil {
 				return nil, err

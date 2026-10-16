@@ -1,6 +1,7 @@
 package main
 
 import (
+	"agentpal/internal/authprofile"
 	"agentpal/internal/codex"
 	appconfig "agentpal/internal/config"
 	"agentpal/internal/modelmanagement"
@@ -36,7 +37,17 @@ func (a *App) SaveModels(req modelmanagement.SaveRequest) (modelmanagement.State
 	if err != nil {
 		return modelmanagement.State{}, err
 	}
-	return s.Save(req)
+	root, err := codex.ExpandPath("~/.agentpal/auth-profiles")
+	if err != nil {
+		return modelmanagement.State{}, err
+	}
+	var result modelmanagement.State
+	err = authprofile.NewStore(root).WithCurrentModels(s.Dir, func() error {
+		var saveErr error
+		result, saveErr = s.Save(req)
+		return saveErr
+	})
+	return result, err
 }
 
 func (a *App) GetDefaultModelSettings() (modelmanagement.DefaultState, error) {

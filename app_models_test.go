@@ -41,6 +41,20 @@ func TestSaveModelsPassesUpdateParamsThroughApp(t *testing.T) {
 	if err != nil || !strings.Contains(string(data), "272000") {
 		t.Fatalf("data=%s err=%v", data, err)
 	}
+	profiles, err := app.ListAuthProfiles()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, profile := range profiles {
+		if profile.Active {
+			savedData, err := os.ReadFile(filepath.Join(os.Getenv("HOME"), ".agentpal", "auth-profiles", profile.ID, "models.json"))
+			if err != nil || string(savedData) != string(data) {
+				t.Fatalf("profile models not saved: %s, %v", savedData, err)
+			}
+			return
+		}
+	}
+	t.Fatal("no current profile")
 }
 
 func TestModelManagementUsesSettingsDirectoryAndRechecksAuth(t *testing.T) {

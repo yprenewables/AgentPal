@@ -111,6 +111,10 @@ func (s *Store) ReconcileCurrent(codexDir string) ([]AuthProfile, CurrentStatus,
 func (s *Store) reconcileCurrent(codexDir string, afterWrite func()) ([]AuthProfile, CurrentStatus, error) {
 	reconcileMu.Lock()
 	defer reconcileMu.Unlock()
+	return s.reconcileCurrentLocked(codexDir, afterWrite)
+}
+
+func (s *Store) reconcileCurrentLocked(codexDir string, afterWrite func()) ([]AuthProfile, CurrentStatus, error) {
 
 	for attempt := 0; attempt < 2; attempt++ {
 		profiles, err := s.List()

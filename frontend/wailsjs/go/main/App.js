@@ -22,6 +22,10 @@ export function BrowseFolder() {
   return window['go']['main']['App']['BrowseFolder']();
 }
 
+export function CancelChatGPTLogin() {
+  return window['go']['main']['App']['CancelChatGPTLogin']();
+}
+
 export function CheckForUpdate() {
   return window['go']['main']['App']['CheckForUpdate']();
 }
@@ -84,6 +88,10 @@ export function ImportCurrentAuth(arg1) {
 
 export function ListAuthProfiles() {
   return window['go']['main']['App']['ListAuthProfiles']();
+}
+
+export function LoginChatGPT() {
+  return window['go']['main']['App']['LoginChatGPT']();
 }
 
 export function LogoutCentralLogin() {

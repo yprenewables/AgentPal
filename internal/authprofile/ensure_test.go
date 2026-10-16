@@ -562,14 +562,14 @@ func TestReconcileCurrentReplacesRotatedChatGPTToken(t *testing.T) {
 	}
 }
 
-func TestReconcileCurrentRejectsMissingProviderTable(t *testing.T) {
+func TestReconcileCurrentRejectsMissingCustomProviderTable(t *testing.T) {
 	for _, auth := range []string{
 		`{"OPENAI_API_KEY":"sk-current-secret"}`,
 		`{"tokens":{"id_token":"header.eyJzdWIiOiJ1c2VyLTEyMyJ9.sig"}}`,
 	} {
 		t.Run(auth, func(t *testing.T) {
 			codexDir := t.TempDir()
-			writeCurrentAuth(t, codexDir, auth, "model_provider = \"openai\"\n")
+			writeCurrentAuth(t, codexDir, auth, "model_provider = \"custom\"\n")
 			store := NewStore(t.TempDir())
 			_, _, err := store.ReconcileCurrent(codexDir)
 			if err == nil || !strings.Contains(err.Error(), "model provider table was not found") {

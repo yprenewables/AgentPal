@@ -32,6 +32,8 @@ type Backend = { App: {
   RefreshConfiguration(): Promise<ConfigRefresh>;
   ApplyConfiguration(request: { changes: ApplyChange[] }): Promise<ApplyResult>;
   ListAuthProfiles(): Promise<AuthProfile[]>;
+  LoginChatGPT(): Promise<AuthProfile>;
+  CancelChatGPTLogin(): Promise<void>;
   GetCurrentAuthStatus(): Promise<CurrentAuthStatus>;
   ImportCurrentAuth(name: string): Promise<AuthProfile>;
   ImportCurrentAPIKey(name: string): Promise<AuthProfile>;
