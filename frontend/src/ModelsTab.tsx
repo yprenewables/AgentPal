@@ -115,6 +115,12 @@ export default function ModelsTab({ onDirtyChange, onBusyChange }: { onDirtyChan
   const editable = !!state?.available && !!state.fileValid && !!state.writable;
   const selectable = draft.filter((entry) => { const model = JSON.parse(entry.raw); return model && typeof model === 'object' && !Array.isArray(model); });
   const allVisible = selectable.length > 0 && selectable.every((entry) => (entry.visibility ?? JSON.parse(entry.raw).visibility) === 'list');
+  const sortedModels = draft.map((entry, index) => {
+    const parsed = JSON.parse(entry.raw);
+    const model: ModelEntry | null = parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null;
+    const title = typeof model?.display_name === 'string' && model.display_name.trim() ? model.display_name : typeof model?.slug === 'string' ? model.slug : `Model ${index + 1}`;
+    return { entry, index, model, title };
+  }).sort((a, b) => a.title.localeCompare(b.title, undefined, { numeric: true, sensitivity: 'base' }));
   function toggleAll(visible: boolean) {
     const visibility = visible ? 'list' : 'hide';
     setDraft(draft.map((entry) => {
@@ -142,10 +148,7 @@ export default function ModelsTab({ onDirtyChange, onBusyChange }: { onDirtyChan
       {jsonOpen && <label className="field"><span>models.json (models array)</span><textarea className="code-editor" spellCheck={false} rows={16} aria-label="models.json editor" value={jsonText} onChange={(event) => setJsonText(event.target.value)} /></label>}
       {draft.length > 0 && <div className="models-select-all"><span>Select all models</span><label className="model-visibility"><input type="checkbox" role="switch" aria-label="Select all models" checked={allVisible} disabled={busy || !editable || !selectable.length} onChange={(event) => toggleAll(event.target.checked)} /><span aria-hidden="true" /></label></div>}
       {!draft.length && <div className="empty-inline">{state.fileExists ? 'No models configured.' : 'No models.json file yet.'} Use Pull to discover models.</div>}
-      {draft.map((entry, index) => {
-        const parsed = JSON.parse(entry.raw);
-        const model: ModelEntry | null = parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null;
-        const title = typeof model?.display_name === 'string' ? model.display_name : typeof model?.slug === 'string' ? model.slug : `Model ${index + 1}`;
+      {sortedModels.map(({ entry, index, model, title }) => {
         const unmatched = !!state?.unmatchedModels?.includes(typeof model?.slug === 'string' ? model.slug : '');
         return <article className="profile-row model-row" key={index}><div className="profile-main"><strong title={title}>{title}</strong><small title={typeof model?.slug === 'string' ? model.slug : undefined}>{typeof model?.slug === 'string' ? model.slug : 'No slug'}</small>{unmatched && <small className="sync-status sync-needs_sync">Not found in model catalog · kept local parameters</small>}</div><div className="profile-actions inline">
           <label className="model-visibility" title={`Show ${title}`}><input type="checkbox" role="switch" aria-label={`Show ${title}`} checked={(entry.visibility ?? model?.visibility) === 'list'} disabled={busy || !editable || !model} onChange={(event) => setDraft(draft.map((item, i) => { if (i !== index) return item; const visibility = event.target.checked ? 'list' : 'hide'; return visibility === model?.visibility ? { raw: item.raw } : { raw: item.raw, visibility }; }))} /><span aria-hidden="true" /></label>
