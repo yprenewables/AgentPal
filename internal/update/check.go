@@ -76,8 +76,20 @@ func versionParts(value string) [3]int {
 	fields := strings.Split(strings.TrimSpace(value), ".")
 	var parts [3]int
 	for i := 0; i < len(fields) && i < len(parts); i++ {
-		part, _ := strconv.Atoi(fields[i])
-		parts[i] = part
+		parts[i] = leadingInt(fields[i])
 	}
 	return parts
+}
+
+// leadingInt 解析字段开头的数字，忽略 beta / rc 等后缀（如 "11-beta" → 11）。
+func leadingInt(field string) int {
+	end := 0
+	for end < len(field) && field[end] >= '0' && field[end] <= '9' {
+		end++
+	}
+	if end == 0 {
+		return 0
+	}
+	value, _ := strconv.Atoi(field[:end])
+	return value
 }
