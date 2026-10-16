@@ -1,7 +1,9 @@
 package modelmanagement
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -9,6 +11,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"agentpal/internal/modelcatalog"
 
 	"github.com/pelletier/go-toml/v2"
 )
@@ -261,5 +265,82 @@ func TestMergeAndTemplate(t *testing.T) {
 	retained, n := Merge(got, []string{})
 	if len(retained) != 2 || n != 0 {
 		t.Fatal("removed unavailable models")
+	}
+}
+
+type fakeCatalog struct {
+	catalog *modelcatalog.Catalog
+	err     error
+	calls   int
+}
+
+func (f *fakeCatalog) Catalog(context.Context) (*modelcatalog.Catalog, error) {
+	f.calls++
+	return f.catalog, f.err
+}
+
+func catalogFixture(t *testing.T) *modelcatalog.Catalog {
+	t.Helper()
+	entry, ok := modelcatalog.BuildInfo("openai/gpt-6-sol", "", 1050000, []string{"file", "image", "text"}, []string{"high", "low"}, "high")
+	if !ok {
+		t.Fatal("fixture entry rejected")
+	}
+	return modelcatalog.NewCatalog([]modelcatalog.Entry{entry})
+}
+
+func TestSaveAppliesCatalogParameters(t *testing.T) {
+	s := fixture(t, keyAuth, config, `{"models":[{"slug":"gpt-6-sol"},{"slug":"unknown-model"}]}`)
+	s.Catalog = &fakeCatalog{catalog: catalogFixture(t)}
+	state := s.State()
+	saved, err := s.Save(SaveRequest{FileHash: state.FileHash, Models: state.Models, UpdateParams: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(saved.UnmatchedModels) != 1 || saved.UnmatchedModels[0] != "unknown-model" {
+		t.Fatalf("unmatched=%v", saved.UnmatchedModels)
+	}
+	var model map[string]json.RawMessage
+	json.Unmarshal(saved.Models[0], &model)
+	var window int64
+	json.Unmarshal(model["context_window"], &window)
+	if window != 272000 {
+		t.Fatalf("context_window=%d", window)
+	}
+	if string(model["default_reasoning_level"]) != `"high"` {
+		t.Fatalf("default=%s", model["default_reasoning_level"])
+	}
+	if _, ok := model["output_modalities"]; ok {
+		t.Fatal("output field written")
+	}
+}
+
+func TestSaveKeepsLocalValuesWhenCatalogUnavailable(t *testing.T) {
+	s := fixture(t, keyAuth, config, `{"models":[{"slug":"gpt-6-sol","context_window":1234}]}`)
+	s.Catalog = &fakeCatalog{err: errors.New("model catalog request failed or timed out")}
+	state := s.State()
+	saved, err := s.Save(SaveRequest{FileHash: state.FileHash, Models: state.Models, UpdateParams: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if saved.EnrichmentError == "" || len(saved.UnmatchedModels) != 0 {
+		t.Fatalf("saved=%+v", saved)
+	}
+	var model map[string]json.RawMessage
+	json.Unmarshal(saved.Models[0], &model)
+	if string(model["context_window"]) != "1234" {
+		t.Fatalf("local value overwritten: %s", model["context_window"])
+	}
+}
+
+func TestSaveSkipsCatalogWhenNotRequested(t *testing.T) {
+	s := fixture(t, keyAuth, config, `{"models":[{"slug":"gpt-6-sol"}]}`)
+	source := &fakeCatalog{catalog: catalogFixture(t)}
+	s.Catalog = source
+	state := s.State()
+	if _, err := s.Save(SaveRequest{FileHash: state.FileHash, Models: state.Models}); err != nil {
+		t.Fatal(err)
+	}
+	if source.calls != 0 {
+		t.Fatalf("catalog fetched %d times", source.calls)
 	}
 }

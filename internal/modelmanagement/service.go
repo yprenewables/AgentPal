@@ -2,6 +2,7 @@ package modelmanagement
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	_ "embed"
 	"encoding/hex"
@@ -17,33 +18,48 @@ import (
 	"sync"
 	"time"
 
+	"agentpal/internal/modelcatalog"
+
 	"github.com/pelletier/go-toml/v2"
 )
 
 const UnavailableMessage = "Model management is only available for API Key profiles. Switch to an API Key profile in Authentication."
 
 type State struct {
-	Available      bool              `json:"available"`
-	Error          string            `json:"error,omitempty"`
-	Provider       string            `json:"provider"`
-	BaseURL        string            `json:"baseUrl"`
-	DiscoveryError string            `json:"discoveryError,omitempty"`
-	FileValid      bool              `json:"fileValid"`
-	Writable       bool              `json:"writable"`
-	FileExists     bool              `json:"fileExists"`
-	FileHash       string            `json:"fileHash"`
-	Models         []json.RawMessage `json:"models"`
-	RawModels      []string          `json:"rawModels"`
+	Available       bool              `json:"available"`
+	Error           string            `json:"error,omitempty"`
+	Provider        string            `json:"provider"`
+	BaseURL         string            `json:"baseUrl"`
+	DiscoveryError  string            `json:"discoveryError,omitempty"`
+	EnrichmentError string            `json:"enrichmentError,omitempty"`
+	UnmatchedModels []string          `json:"unmatchedModels"`
+	FileValid       bool              `json:"fileValid"`
+	Writable        bool              `json:"writable"`
+	FileExists      bool              `json:"fileExists"`
+	FileHash        string            `json:"fileHash"`
+	Models          []json.RawMessage `json:"models"`
+	RawModels       []string          `json:"rawModels"`
 }
 type SaveRequest struct {
 	FileHash            string            `json:"fileHash"`
 	Models              []json.RawMessage `json:"models"`
 	RawModels           []string          `json:"rawModels,omitempty"`
 	VisibilityOverrides map[int]string    `json:"visibilityOverrides,omitempty"`
+	UpdateParams        bool              `json:"updateParams,omitempty"`
 }
+
+// CatalogSource 提供模型目录；默认实现会请求 OpenRouter。
+type CatalogSource interface {
+	Catalog(ctx context.Context) (*modelcatalog.Catalog, error)
+}
+
+// NewCatalogSource 可被测试替换，用于离线注入模型目录。
+var NewCatalogSource = func() CatalogSource { return modelcatalog.NewClient() }
+
 type Service struct {
-	Dir    string
-	Client *http.Client
+	Dir     string
+	Client  *http.Client
+	Catalog CatalogSource
 }
 
 var saveMu sync.Mutex
@@ -139,7 +155,7 @@ func (s *Service) read() (map[string]json.RawMessage, []json.RawMessage, string,
 }
 
 func (s *Service) State() State {
-	state := State{Models: []json.RawMessage{}, RawModels: []string{}}
+	state := State{Models: []json.RawMessage{}, RawModels: []string{}, UnmatchedModels: []string{}}
 	provider, base, key, err := s.credentials()
 	if key == "" {
 		if err != nil {
@@ -311,6 +327,7 @@ func (s *Service) Save(req SaveRequest) (State, error) {
 		}
 		req.Models[i], _ = json.Marshal(model)
 	}
+	report := enrichModels(req.Models, req.UpdateParams, s.catalogSource())
 	raw, err := json.Marshal(req.Models)
 	if err != nil {
 		return State{}, err
@@ -397,5 +414,49 @@ func (s *Service) Save(req SaveRequest) (State, error) {
 			return State{}, fmt.Errorf("models saved, but model catalog configuration failed; reload and save again: %w", err)
 		}
 	}
-	return s.State(), nil
+	result := s.State()
+	result.EnrichmentError = report.err
+	result.UnmatchedModels = report.unmatched
+	return result, nil
+}
+
+type enrichmentReport struct {
+	err       string
+	unmatched []string
+}
+
+func (s *Service) catalogSource() CatalogSource {
+	if s.Catalog != nil {
+		return s.Catalog
+	}
+	return NewCatalogSource()
+}
+
+// enrichModels 按需从模型目录补全参数；失败或未匹配时保留本地值。
+func enrichModels(models []json.RawMessage, enabled bool, source CatalogSource) enrichmentReport {
+	report := enrichmentReport{unmatched: []string{}}
+	if !enabled {
+		return report
+	}
+	catalog, err := source.Catalog(context.Background())
+	if err != nil {
+		report.err = err.Error()
+		return report
+	}
+	for i, raw := range models {
+		var model map[string]json.RawMessage
+		if json.Unmarshal(raw, &model) != nil || model == nil {
+			continue
+		}
+		var slug string
+		_ = json.Unmarshal(model["slug"], &slug)
+		info, ok := catalog.Lookup(slug)
+		if !ok {
+			report.unmatched = append(report.unmatched, slug)
+			continue
+		}
+		modelcatalog.Apply(model, info)
+		models[i], _ = json.Marshal(model)
+	}
+	return report
 }
