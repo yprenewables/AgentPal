@@ -16,6 +16,13 @@ export function mergeModels(models: ModelEntry[], ids: string[]) {
   return { models: [...retained, ...additions], added: additions.length, removed: models.length - retained.length };
 }
 
+export function summarizeEnrichment(state: ModelManagementState) {
+  if (state.enrichmentError) return `Models saved, but model parameters were not updated: ${state.enrichmentError}`;
+  const unmatched = state.unmatchedModels || [];
+  if (!unmatched.length) return 'Models saved and parameters updated from the model catalog. Restart ChatGPT / Codex to reload the model list.';
+  return `Models saved. Kept local parameters for ${unmatched.length} unmatched model${unmatched.length === 1 ? '' : 's'}: ${unmatched.join(', ')}`;
+}
+
 export default function ModelsTab({ onDirtyChange, onBusyChange }: { onDirtyChange: (dirty: boolean) => void; onBusyChange: (busy: boolean) => void }) {
   const [state, setState] = useState<ModelManagementState | null>(null);
   const [draft, setDraft] = useState<{ raw: string; visibility?: string }[]>([]);
@@ -25,6 +32,7 @@ export default function ModelsTab({ onDirtyChange, onBusyChange }: { onDirtyChan
   const [defaults, setDefaults] = useState<DefaultModelSettings | null>(null);
   const [defaultModel, setDefaultModel] = useState('');
   const [effort, setEffort] = useState('');
+  const [updateParams, setUpdateParams] = useState(true);
   const modelsDirty = !!state && JSON.stringify(draft) !== JSON.stringify(state.rawModels.map((raw) => ({ raw })));
   const defaultsDirty = !!defaults && (defaultModel !== defaults.model || effort !== defaults.effort);
   const dirty = modelsDirty || defaultsDirty;
@@ -60,11 +68,11 @@ export default function ModelsTab({ onDirtyChange, onBusyChange }: { onDirtyChan
     if (!api || !state) return;
     setBusy(true); setMessage(null);
     try {
-      const next = await api.SaveModels({ fileHash: state.fileHash, rawModels: draft.map((entry) => entry.raw), visibilityOverrides: Object.fromEntries(draft.flatMap((entry, index) => entry.visibility ? [[index, entry.visibility]] : [])) });
+      const next = await api.SaveModels({ fileHash: state.fileHash, rawModels: draft.map((entry) => entry.raw), visibilityOverrides: Object.fromEntries(draft.flatMap((entry, index) => entry.visibility ? [[index, entry.visibility]] : [])), updateParams });
       if (!next.available || !next.fileValid || next.error) throw new Error(next.error || 'Could not reload saved models.');
       setState(next); setDraft(next.rawModels.map((raw) => ({ raw })));
       setDefaults(await api.GetDefaultModelSettings());
-      setMessage({ error: false, text: 'Models saved and catalog configured. Restart ChatGPT / Codex to reload the model list.' });
+      setMessage({ error: false, text: updateParams ? summarizeEnrichment(next) : 'Models saved and catalog configured. Restart ChatGPT / Codex to reload the model list.' });
     } catch (error) { setMessage({ error: true, text: String(error) }); }
     finally { setBusy(false); }
   }
@@ -92,7 +100,7 @@ export default function ModelsTab({ onDirtyChange, onBusyChange }: { onDirtyChan
   }
   return <section className="workspace">
     <div className="section-heading"><div><h1>Models</h1><p>{state?.available ? [state.provider || 'Current Provider', state.baseUrl].filter(Boolean).join(' · ') : 'Manage models for the current API Key profile.'}</p></div>
-      <div className="button-row"><button className="secondary" disabled={busy || !editable || !!state?.discoveryError} title={state?.discoveryError} onClick={() => void discover()}>Auto update</button><button className="primary" disabled={busy || !editable || !modelsDirty} onClick={() => void save()}>Save models</button></div>
+      <div className="button-row"><label className="model-toggle" title="Refresh reasoning levels, input modalities and context window from the model catalog on save"><input type="checkbox" checked={updateParams} disabled={busy} onChange={(event) => setUpdateParams(event.target.checked)} /><span>Update params</span></label><button className="secondary" disabled={busy || !editable || !!state?.discoveryError} title={state?.discoveryError} onClick={() => void discover()}>Auto update</button><button className="primary" disabled={busy || !editable || (!modelsDirty && !updateParams)} onClick={() => void save()}>Save models</button></div>
     </div>
     {busy && <div role="status" className="empty-inline">Loading models…</div>}
     {message && <div role={message.error ? 'alert' : 'status'} className={`notice ${message.error ? 'error' : 'success'}`}>{message.text}</div>}
@@ -112,7 +120,8 @@ export default function ModelsTab({ onDirtyChange, onBusyChange }: { onDirtyChan
         const parsed = JSON.parse(entry.raw);
         const model: ModelEntry | null = parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null;
         const title = typeof model?.display_name === 'string' ? model.display_name : typeof model?.slug === 'string' ? model.slug : `Model ${index + 1}`;
-        return <article className="profile-row model-row" key={index}><div className="profile-main"><strong title={title}>{title}</strong><small title={typeof model?.slug === 'string' ? model.slug : undefined}>{typeof model?.slug === 'string' ? model.slug : 'No slug'}</small></div><div className="profile-actions inline">
+        const unmatched = !!state?.unmatchedModels?.includes(typeof model?.slug === 'string' ? model.slug : '');
+        return <article className="profile-row model-row" key={index}><div className="profile-main"><strong title={title}>{title}</strong><small title={typeof model?.slug === 'string' ? model.slug : undefined}>{typeof model?.slug === 'string' ? model.slug : 'No slug'}</small>{unmatched && <small className="sync-status sync-needs_sync">Not found in model catalog · kept local parameters</small>}</div><div className="profile-actions inline">
           <label className="model-visibility" title={`Show ${title}`}><input type="checkbox" role="switch" aria-label={`Show ${title}`} checked={(entry.visibility ?? model?.visibility) === 'list'} disabled={busy || !editable || !model} onChange={(event) => setDraft(draft.map((item, i) => { if (i !== index) return item; const visibility = event.target.checked ? 'list' : 'hide'; return visibility === model?.visibility ? { raw: item.raw } : { raw: item.raw, visibility }; }))} /><span aria-hidden="true" /></label>
           <button className="secondary" disabled={busy || !editable} aria-label={`Delete ${title}`} onClick={() => setDeleting(index)}>Delete</button>
         </div></article>;
