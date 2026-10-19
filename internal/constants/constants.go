@@ -5,6 +5,6 @@ const (
 	AppVersion  = "0.3.3-beta"
 	RepoOwner   = "yprenewables"
 	RepoName    = "AgentPal"
-	DefaultPort = 28888
+	DefaultPort = 80
 	StateDir    = ".agentpal"
 )

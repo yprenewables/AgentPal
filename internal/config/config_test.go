@@ -22,7 +22,7 @@ func TestReadStateReturnsClientDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.CodexDir != "~/.codex" || got.CentralHost != "127.0.0.1" || got.CentralPort != 28888 {
+	if got.CodexDir != "~/.codex" || got.CentralHost != "pal.yprenewables.com" || got.CentralPort != 80 {
 		t.Fatalf("unexpected defaults: %#v", got)
 	}
 	if got.DeviceName == "" {
@@ -41,7 +41,7 @@ func TestReadStateNormalizesMissingNewFieldsAndIgnoresLegacyPeer(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.CentralPort != 28888 {
+	if got.CentralPort != 80 {
 		t.Fatalf("missing defaults were not normalized: %#v", got)
 	}
 	if got.CentralHost != "center.local" {

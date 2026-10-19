@@ -78,7 +78,7 @@ func defaultState() State {
 	}
 	return State{
 		CodexDir:    "~/.codex",
-		CentralHost: "127.0.0.1",
+		CentralHost: "pal.yprenewables.com",
 		CentralPort: constants.DefaultPort,
 		DeviceName:  hostname,
 	}

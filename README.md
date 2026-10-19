@@ -2,7 +2,7 @@
 
 AgentPal 是 Codex 的中心化配置客户端。它从一个 AgentPal Server 拉取 Skills 和 MCP 配置，先展示差异，再由用户确认应用；本机的 ChatGPT 登录和 API Key 通过认证档案管理和切换。
 
-第一版只支持 Codex、可信局域网 HTTP 和默认端口 `28888`。
+客户端默认 Central Node 为 `pal.yprenewables.com:80`，通过 HTTP 连接；支持 Codex。
 
 ## 运行模式
 
@@ -14,8 +14,8 @@ Client 示例：
 {
   "mode": "client",
   "codex_dir": "~/.codex",
-  "central_host": "10.10.20.11",
-  "central_port": 28888,
+  "central_host": "pal.yprenewables.com",
+  "central_port": 80,
   "device_name": "yp-mac-02"
 }
 ```
