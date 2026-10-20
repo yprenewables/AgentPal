@@ -6,7 +6,6 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
@@ -43,22 +42,36 @@ func TestApplyConfigurationDownloadsSelectedChanges(t *testing.T) {
 	}
 }
 
-func TestApplyConfigurationDeletesSelectedMCP(t *testing.T) {
-	target := centraltest.MakeCodexDir(t)
-	configPath := filepath.Join(target, "config.toml")
-	if err := os.WriteFile(configPath, []byte("[mcp_servers.remove]\ncommand = \"remove\"\n\n[mcp_servers.keep]\ncommand = \"keep\"\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
+func TestApplyConfigurationRejectsUnsupportedChanges(t *testing.T) {
+	for _, change := range []types.ApplyChange{
+		{Kind: "mcp", Name: "remove", Action: "delete"},
+		{Kind: "mcp", Name: "remove", Action: "apply"},
+		{Kind: "skill", Name: "translate", Action: "delete"},
+		{Kind: "skill", Name: "translate", Action: "upload"},
+		{Kind: "skill", Name: "translate", Action: "apply"},
+	} {
+		t.Run(change.Kind+"_"+change.Action, func(t *testing.T) {
+			target := centraltest.MakeCodexDir(t)
+			configPath := filepath.Join(target, "config.toml")
+			if err := os.WriteFile(configPath, []byte("[mcp_servers.remove]\ncommand = \"remove\"\n\n[mcp_servers.keep]\ncommand = \"keep\"\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
 
-	result, err := Apply(context.Background(), NewClient(nil, 2*time.Second), "http://unused", target, types.CenterManifest{}, []types.ApplyChange{{Kind: "mcp", Name: "remove", Action: "delete"}})
-	if err != nil || !result.OK {
-		t.Fatalf("result=%#v err=%v", result, err)
-	}
-	config, err := os.ReadFile(configPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if strings.Contains(string(config), "[mcp_servers.remove]") || !strings.Contains(string(config), "[mcp_servers.keep]") {
-		t.Fatalf("config=%s", config)
+			result, err := Apply(context.Background(), NewClient(nil, 2*time.Second), "http://unused", target, types.CenterManifest{}, []types.ApplyChange{change})
+			if err == nil || result.OK {
+				t.Fatalf("result=%#v err=%v", result, err)
+			}
+			config, err := os.ReadFile(configPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if string(config) != "[mcp_servers.remove]\ncommand = \"remove\"\n\n[mcp_servers.keep]\ncommand = \"keep\"\n" {
+				t.Fatalf("config=%s", config)
+			}
+			skill, err := os.ReadFile(filepath.Join(target, "skills", "translate", "SKILL.md"))
+			if err != nil || string(skill) != "one" {
+				t.Fatalf("local skill changed: %q, %v", skill, err)
+			}
+		})
 	}
 }

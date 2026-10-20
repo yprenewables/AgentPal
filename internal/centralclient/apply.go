@@ -11,13 +11,24 @@ import (
 	"os"
 	"path/filepath"
 
-	"agentpal/internal/codex"
 	"agentpal/internal/types"
 )
 
 func Apply(ctx context.Context, client Client, base, target string, manifest types.CenterManifest, changes []types.ApplyChange) (types.ApplyResult, error) {
 	if len(changes) == 0 {
 		return types.ApplyResult{}, errors.New("no configuration changes selected")
+	}
+	available := make(map[string]bool, len(manifest.Skills))
+	for _, skill := range manifest.Skills {
+		available[skill.Name] = true
+	}
+	for _, change := range changes {
+		if change.Kind != "skill" || change.Action != "apply" {
+			return types.ApplyResult{}, errors.New("configuration only supports downloading and updating skills from Central")
+		}
+		if !available[change.Name] {
+			return types.ApplyResult{}, fmt.Errorf("skill %q is not available from Central", change.Name)
+		}
 	}
 	temp, err := os.MkdirTemp("", "agentpal-config-")
 	if err != nil {
@@ -37,52 +48,16 @@ func Apply(ctx context.Context, client Client, base, target string, manifest typ
 			}
 		}
 	}
-	for _, item := range manifest.MCP {
-		if change, ok := selected["mcp:"+item.Name]; ok && change.Action == "apply" {
-			resp, err := client.DownloadMCP(base, item.Name)
-			if err != nil {
-				return types.ApplyResult{}, err
-			}
-			defer resp.Body.Close()
-			if resp.StatusCode != 200 {
-				return types.ApplyResult{}, fmt.Errorf("download MCP %s: %s", item.Name, resp.Status)
-			}
-			dest := filepath.Join(temp, "mcp", item.Name+".toml")
-			if err := saveHash(resp.Body, dest, item.SHA256); err != nil {
-				return types.ApplyResult{}, err
-			}
-		}
-	}
 	result := types.ApplyResult{OK: true}
 	for _, change := range changes {
 		key := change.Kind + ":" + change.Name
-		if change.Action == "delete" {
-			if change.Kind == "skill" {
-				_ = os.RemoveAll(filepath.Join(target, "skills", change.Name))
-			} else if change.Kind == "mcp" {
-				if err := codex.UpsertMCP(filepath.Join(target, "config.toml"), nil, []string{change.Name}); err != nil {
-					return types.ApplyResult{}, err
-				}
-			}
-		} else if change.Action == "apply" {
-			if change.Kind == "skill" {
-				src := filepath.Join(temp, "skills", change.Name)
-				dst := filepath.Join(target, "skills", change.Name)
-				if err := os.RemoveAll(dst); err != nil {
-					return types.ApplyResult{}, err
-				}
-				if err := copyIfExists(src, dst); err != nil {
-					return types.ApplyResult{}, err
-				}
-			} else if change.Kind == "mcp" {
-				data, err := os.ReadFile(filepath.Join(temp, "mcp", change.Name+".toml"))
-				if err != nil {
-					return types.ApplyResult{}, err
-				}
-				if err := codex.UpsertMCP(filepath.Join(target, "config.toml"), []codex.MCPEntry{{Name: change.Name, TOML: data}}, nil); err != nil {
-					return types.ApplyResult{}, err
-				}
-			}
+		src := filepath.Join(temp, "skills", change.Name)
+		dst := filepath.Join(target, "skills", change.Name)
+		if err := os.RemoveAll(dst); err != nil {
+			return types.ApplyResult{}, err
+		}
+		if err := copyIfExists(src, dst); err != nil {
+			return types.ApplyResult{}, err
 		}
 		result.Applied = append(result.Applied, key)
 	}

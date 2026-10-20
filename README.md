@@ -1,6 +1,6 @@
 # AgentPal
 
-AgentPal 是 Codex 的中心化配置客户端。它从一个 AgentPal Server 拉取 Skills 和 MCP 配置，先展示差异，再由用户确认应用；本机的 ChatGPT 登录和 API Key 通过认证档案管理和切换。
+AgentPal 是 Codex 的中心化配置客户端。它从中心节点单向下载和更新 Skills，先展示差异，再由用户确认应用；本机的 ChatGPT 登录和 API Key 通过认证档案管理和切换。
 
 客户端默认 Central Node 为 `pal.yprenewables.com:80`，通过 HTTP 连接；支持 Codex。
 
@@ -29,11 +29,11 @@ Server 直接读取配置的 Codex 目录。每次清单请求都会重新扫描
 - `Authentication`：导入当前 Codex 登录、创建 API Key 档案、查看和切换本地档案。
 - 当前使用 API Key 时，可点击 `Log in with ChatGPT`，在浏览器完成 ChatGPT 授权后自动保存并切换本地档案；原 API Key 档案保留，可随时切回。需要安装 Codex CLI；登录支持取消，五分钟超时，授权失败不会更改当前认证。切换后重启 ChatGPT / Codex。
 - `Models`：从当前 Provider 的 `/models` 同步模型清单，移除已下线模型，调整可见性及默认模型、推理强度。Auto update 更新草稿，Save models 后写入文件。
-- `Configuration`：比较 Skills 和 `[mcp_servers.*]`，预览新增、修改、本地独有和一致项，确认后应用。
+- `Configuration`：展示服务器 Skills 及其本地差异，勾选新增或有变化的 Skills 后下载和更新；已一致项不可勾选。
 
 保存模型会补齐 Codex 模型目录所需的元数据，并将当前 Codex 目录的 `models.json` 接入 `config.toml` 的 `model_catalog_json`。保存后完全退出并重新打开 ChatGPT / Codex 以加载清单。模型实际调用需要 Provider 支持对应模型的 Responses API。
 
-本地独有的 Skill/MCP 默认保留。下载内容会先校验 SHA-256。
+Configuration 仅支持从服务器到本地的 Skills 下载和更新。本地独有 Skills 保留，MCP 不参与此操作。下载内容会先校验 SHA-256。
 
 ## 认证档案
 
