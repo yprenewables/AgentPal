@@ -83,6 +83,7 @@ function AuthenticationTabCompact({ profiles, reload, setNotice }: { profiles: A
   const [syncing, setSyncing] = useState(false);
   const [updating, setUpdating] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState<string | null>(null);
+  const profileReadOnly = editDialog.profile?.source === 'central_login';
 
   // 点击页面其他位置时关闭行内「更多」菜单。
   useEffect(() => {
@@ -205,7 +206,7 @@ function AuthenticationTabCompact({ profiles, reload, setNotice }: { profiles: A
   }
 
   async function saveRawProfile() {
-    if (!api) return;
+    if (!api || profileReadOnly) return;
     try {
       if (editDialog.profile) {
         await api.UpdateRawProfile(editDialog.profile.id, { name: editDialog.name, authJson: editDialog.authJson, configToml: editDialog.configToml });
@@ -296,6 +297,7 @@ function AuthenticationTabCompact({ profiles, reload, setNotice }: { profiles: A
             <div className="more-menu-wrapper">
               <IconButton label="More actions" onClick={(e) => { e?.stopPropagation(); setMenuOpen(menuOpen === profile.id ? null : profile.id); }}><MoreIcon /></IconButton>
               {menuOpen === profile.id && <div className="more-menu">
+                {profile.source === 'central_login' && <button onClick={() => { setMenuOpen(null); void openEditDialog(profile); }}>View details</button>}
                 {profile.source !== 'central_login' && profile.type === 'api_key' && <button onClick={() => { setMenuOpen(null); void openEditDialog(profile); }}>Edit</button>}
                 <button className={profile.active ? 'disabled' : ''} disabled={profile.active} onClick={() => { setMenuOpen(null); if (!profile.active) void removeProfile(profile); }}>Delete</button>
               </div>}
@@ -307,11 +309,11 @@ function AuthenticationTabCompact({ profiles, reload, setNotice }: { profiles: A
     </section>
     {chatGPTBusy && <div className="dialog-backdrop"><div className="dialog" role="dialog" aria-modal="true" aria-labelledby="chatgpt-login-title"><h2 id="chatgpt-login-title">Log in with ChatGPT</h2><p>Complete the ChatGPT login in your browser. Your API Key profile will be kept so you can switch back.</p><p role="status">{chatGPTCancelling ? 'Cancelling login…' : 'Waiting for browser authorization…'}</p><div className="button-row dialog-actions"><button className="secondary" disabled={chatGPTCancelling} onClick={() => void cancelChatGPTLogin()}>Cancel login</button></div></div></div>}
     {editDialog.open && <div className="dialog-backdrop"><div className="dialog wide" role="dialog" aria-modal="true" aria-labelledby="profile-editor-title">
-      <div className="section-heading"><h2 id="profile-editor-title">{editDialog.profile ? 'Edit local profile' : 'New local profile'}</h2><IconButton label="Close" onClick={() => setEditDialog({ open: false, name: '', authJson: '', configToml: '' })}><CloseIcon /></IconButton></div>
-      <label className="field"><span>Name</span><input value={editDialog.name} onChange={(event) => setEditDialog({ ...editDialog, name: event.target.value })} /></label>
-      <label className="field"><span>auth.json</span><textarea className="code-editor" spellCheck={false} rows={5} value={editDialog.authJson} onChange={(event) => setEditDialog({ ...editDialog, authJson: event.target.value })} /></label>
-      <label className="field"><span>config-auth.toml</span><textarea className="code-editor" spellCheck={false} rows={10} value={editDialog.configToml} onChange={(event) => setEditDialog({ ...editDialog, configToml: event.target.value })} /></label>
-      <div className="button-row dialog-actions"><button className="secondary" onClick={() => setEditDialog({ open: false, name: '', authJson: '', configToml: '' })}>Cancel</button><button className="primary" onClick={() => void saveRawProfile()}>{editDialog.profile ? 'Save' : 'Create'}</button></div>
+      <div className="section-heading"><h2 id="profile-editor-title">{profileReadOnly ? 'Central profile details (read-only)' : editDialog.profile ? 'Edit local profile' : 'New local profile'}</h2><IconButton label="Close" onClick={() => setEditDialog({ open: false, name: '', authJson: '', configToml: '' })}><CloseIcon /></IconButton></div>
+      <label className="field"><span>Name</span><input readOnly={profileReadOnly} value={editDialog.name} onChange={(event) => setEditDialog({ ...editDialog, name: event.target.value })} /></label>
+      <label className="field"><span>auth.json</span><textarea className="code-editor" readOnly={profileReadOnly} spellCheck={false} rows={5} value={editDialog.authJson} onChange={(event) => setEditDialog({ ...editDialog, authJson: event.target.value })} /></label>
+      <label className="field"><span>config-auth.toml</span><textarea className="code-editor" readOnly={profileReadOnly} spellCheck={false} rows={10} value={editDialog.configToml} onChange={(event) => setEditDialog({ ...editDialog, configToml: event.target.value })} /></label>
+      <div className="button-row dialog-actions"><button className="secondary" onClick={() => setEditDialog({ open: false, name: '', authJson: '', configToml: '' })}>{profileReadOnly ? 'Close' : 'Cancel'}</button>{!profileReadOnly && <button className="primary" onClick={() => void saveRawProfile()}>{editDialog.profile ? 'Save' : 'Create'}</button>}</div>
     </div></div>}
     {confirmAction && <div className="dialog-backdrop"><div className="dialog"><div className="section-heading"><h2>{confirmAction.kind === 'delete' ? 'Delete profile?' : confirmAction.localProvider ? 'Replace local provider?' : 'Add profile provider?'}</h2><button className="icon-button" onClick={() => setConfirmAction(null)}>×</button></div>{confirmAction.kind === 'delete' ? <p>Delete {confirmAction.profile?.name || 'this profile'} and its saved credentials? Current credentials will not change.</p> : <div className="provider-diff"><p>{confirmAction.localProvider ? 'Switching profiles will replace the matching local Provider configuration with the Profile Provider configuration. auth.json and model_provider will also be updated. Other local Providers, MCP servers, projects, and settings will be kept.' : 'The Profile Provider is not configured locally. Switching profiles will add it and update auth.json and model_provider. Other local Providers, MCP servers, projects, and settings will be kept.'}</p>{confirmAction.profileProvider && <div className="diff-columns"><div className="diff-column"><strong>Profile Provider (will be applied)</strong><pre>{confirmAction.profileProvider}</pre></div>{confirmAction.localProvider && <div className="diff-column"><strong>Local Provider (will be replaced)</strong><pre>{confirmAction.localProvider}</pre></div>}</div>}</div>}<div className="button-row"><button className="secondary" onClick={() => setConfirmAction(null)}>Cancel</button><button className={confirmAction.kind === 'delete' ? 'danger' : 'primary'} onClick={() => void confirmActionNow()}>{confirmAction.kind === 'delete' ? 'Delete' : 'Switch profile'}</button></div></div></div>}
   </section>;

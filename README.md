@@ -88,6 +88,19 @@ Configuration 仅支持从服务器到本地的 Skills 下载和更新。本地�
 
 Server 不在配置清单中发布 `auth.json`。所有路径都会进行安全校验，拒绝绝对路径和路径穿越。
 
+## macOS 安装包
+
+下载 DMG 后，将 AgentPal 拖入 Applications（应用程序），再从“应用程序”打开。更新前退出旧客户端，拖入时选择“替换”，安装后推出安装磁盘。
+
+在 macOS 上构建并打包（需要 Finder 可用）：
+
+```sh
+wails build -platform darwin/arm64
+bash scripts/build-dmg.sh
+```
+
+脚本验证应用签名，生成带 Applications 快捷入口、中文安装说明和 Finder 图标布局的 `build/release/AgentPal-<版本>-macos-<架构>.dmg`，并输出 SHA-256。也可传入已有 `.app` 路径和输出目录；目标文件已存在时脚本会停止。
+
 ## 本地数据
 
 ```text
